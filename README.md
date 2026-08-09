@@ -196,11 +196,11 @@ Secret 名称必须完全一致。旧的 `DOUYIN_STORAGE_STATE` 和 `DOUYIN_STOR
 Actions -> Send Douyin Messages -> Run workflow
 ```
 
-如果首次进入 Actions 页面，先点击 `I understand my workflows, go ahead and enable them`。第一次运行保持 `dry_run=true`，它只验证登录状态和好友，不发送消息。运行失败时，在该次任务的 `Artifacts` 中下载诊断文件并查看截图。
+如果首次进入 Actions 页面，先点击 `I understand my workflows, go ahead and enable them`。`dry_run` 默认是 `false`，直接执行正式发送；只有需要临时检查登录状态和好友且不发送消息时，才勾选 `dry_run=true`。运行失败时，在该次任务的 `Artifacts` 中下载诊断文件并查看截图。
 
 ### 5. 正式发送和定时执行
 
-dry-run 成功后，再手动运行一次并设置 `dry_run=false`。工作流还会在每天 UTC 00:00，即北京时间 08:00 自动正式发送；GitHub 的定时任务可能延迟。
+手动运行保持默认的 `dry_run=false` 即会正式发送。工作流还会在每天 UTC 00:00，即北京时间 08:00 自动正式发送；GitHub 的定时任务可能延迟。
 
 Cookie 过期、退出登录或被抖音撤销后，需要在 Windows 浏览器重新登录、重新通过 Cookie-Editor 导出，并覆盖 `DOUYIN_COOKIE` Secret。
 

@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: Only verify login and friends
+        description: Only verify login and friends without sending
         type: boolean
-        default: true
+        default: false
   schedule:
     - cron: "0 0 * * *"
 
