@@ -1,12 +1,28 @@
 from __future__ import annotations
 
 import random
+import secrets
+from urllib.parse import urlsplit
 
 from playwright.async_api import Page
 
 from app.douyin import DouyinChat, PageOperationError, first_visible
 from app.models import Message, Sticker
 from app.selectors import IMAGE_INPUTS, STICKER_BUTTONS, STICKER_PANELS
+
+
+LATEST_OUTGOING_MESSAGE = (
+    '.messageMessageListlist [data-index="0"] '
+    '.messageMessageBoxmessageBox:has(.messageMessageBoxcontentBox.messageMessageBoxisFromMe)'
+)
+STICKER_CONFIRM_ANCHOR = "data-douyin-sender-anchor"
+STICKER_FAILURE_MARKERS = (
+    "text=发送失败",
+    '[aria-label*="重试"]',
+    '[title*="重试"]',
+    '[class*="sendFailed"]',
+    '[class*="SendFailed"]',
+)
 
 
 async def send_message(page: Page, chat: DouyinChat, message: Message, stickers: dict[str, Sticker]) -> None:
@@ -72,8 +88,7 @@ async def send_image(page: Page, image_path: str) -> None:
 
 
 async def send_douyin_sticker(page: Page, sticker: Sticker) -> None:
-    message_boxes = page.locator('.messageMessageBoxmessageBox')
-    before = await message_boxes.count()
+    before = await _mark_latest_outgoing_message(page)
     button = await first_visible(page, STICKER_BUTTONS)
     await button.click(force=True)
     panel = await first_visible(page, STICKER_PANELS)
@@ -89,8 +104,7 @@ async def send_douyin_sticker(page: Page, sticker: Sticker) -> None:
         candidate = item.nth(index)
         description = candidate.locator('.emojiEmojiItememojiItemDesc')
         if await description.count() and (await description.first.inner_text()).strip() == name:
-            await candidate.click(force=True)
-            await _confirm_sticker_sent(page, message_boxes, before, name)
+            await _click_and_confirm_sticker(page, candidate, before, name)
             return
 
     candidates = (
@@ -102,15 +116,13 @@ async def send_douyin_sticker(page: Page, sticker: Sticker) -> None:
     )
     for candidate in candidates:
         if await candidate.count() and await candidate.first.is_visible():
-            await candidate.first.click()
-            await _confirm_sticker_sent(page, message_boxes, before, name)
+            await _click_and_confirm_sticker(page, candidate.first, before, name)
             return
 
     if sticker.fallback_index is not None:
         items = panel.locator('[role="button"], img, [aria-label], [title]')
         if await items.count() > sticker.fallback_index:
-            await items.nth(sticker.fallback_index).click()
-            await _confirm_sticker_sent(page, message_boxes, before, name)
+            await _click_and_confirm_sticker(page, items.nth(sticker.fallback_index), before, name)
             return
     raise PageOperationError(f"在抖音表情面板中找不到原生表情: {sticker.name}")
 
@@ -119,12 +131,77 @@ def _css_escape(value: str) -> str:
     return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
-async def _confirm_sticker_sent(page: Page, message_boxes, before: int, name: str) -> None:
+async def _mark_latest_outgoing_message(page: Page) -> tuple[str, str]:
+    anchor = secrets.token_hex(8)
+    latest = page.locator(LATEST_OUTGOING_MESSAGE).first
+    if not await latest.count():
+        return anchor, ""
+
+    content = latest.locator('[data-e2e="msg-item-content"]').first
+    before_content = await content.inner_html() if await content.count() else await latest.inner_html()
+    await latest.evaluate(
+        "(element, value) => element.setAttribute('data-douyin-sender-anchor', value)",
+        anchor,
+    )
+    return anchor, before_content
+
+
+async def _click_and_confirm_sticker(page: Page, item, before: tuple[str, str], name: str) -> None:
+    resource_key = await _sticker_resource_key(item)
+    await item.click(force=True)
+    await _confirm_sticker_sent(page, before, name, resource_key)
+
+
+async def _sticker_resource_key(item) -> str:
+    src = await item.get_attribute("src")
+    if not src:
+        image = item.locator("img").first
+        if await image.count():
+            src = await image.get_attribute("src")
+    if not src:
+        return ""
+    return urlsplit(src).path.rsplit("/", 1)[-1]
+
+
+async def _confirm_sticker_sent(
+    page: Page,
+    before: tuple[str, str],
+    name: str,
+    resource_key: str = "",
+) -> None:
+    anchor, before_content = before
     try:
         await page.wait_for_function(
-            """([selector, count]) => document.querySelectorAll(selector).length > count""",
-            arg=['.messageMessageBoxmessageBox', before],
-            timeout=10_000,
+            """([selector, anchor, previousContent, expectedResource]) => {
+                const message = document.querySelector(selector);
+                if (!message) return false;
+                const content = message.querySelector('[data-e2e="msg-item-content"]') || message;
+                const isNewMessage =
+                    message.getAttribute('data-douyin-sender-anchor') !== anchor ||
+                    content.innerHTML !== previousContent;
+                if (!isNewMessage) return false;
+                if (!expectedResource) return true;
+                const images = [...content.querySelectorAll('img')];
+                return images.some(image => (image.src || '').includes(expectedResource)) || images.length > 0;
+            }""",
+            arg=[LATEST_OUTGOING_MESSAGE, anchor, before_content, resource_key],
+            timeout=15_000,
         )
+        await page.wait_for_timeout(3_000)
+        latest = page.locator(LATEST_OUTGOING_MESSAGE).first
+        for selector in STICKER_FAILURE_MARKERS:
+            marker = latest.locator(selector).first
+            if await marker.count() and await marker.is_visible():
+                raise PageOperationError(f"原生表情“{name}”发送失败，页面提示可以重试")
+    except PageOperationError:
+        raise
     except Exception as exc:
-        raise PageOperationError(f"原生表情“{name}”已点击，但无法确认是否发送成功") from exc
+        raise PageOperationError(f"原生表情“{name}”已点击，但没有检测到新的已发送消息") from exc
+    finally:
+        anchors = page.locator(f"[{STICKER_CONFIRM_ANCHOR}]")
+        try:
+            await anchors.evaluate_all(
+                "elements => elements.forEach(element => element.removeAttribute('data-douyin-sender-anchor'))"
+            )
+        except Exception:
+            pass
