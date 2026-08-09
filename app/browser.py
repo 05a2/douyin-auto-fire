@@ -109,7 +109,9 @@ def _normalize_cookies(cookies: list[Any]) -> list[dict[str, Any]]:
         name = cookie.get("name")
         value = cookie.get("value")
         domain = cookie.get("domain")
-        if not isinstance(name, str) or not name or not isinstance(value, str):
+        if name == "":
+            continue
+        if not isinstance(name, str) or not isinstance(value, str):
             raise ConfigError(f"DOUYIN_COOKIE[{index}] 缺少有效的 name 或 value")
         if not isinstance(domain, str) or not domain:
             raise ConfigError(f"DOUYIN_COOKIE[{index}] 缺少有效的 domain")
@@ -132,6 +134,8 @@ def _normalize_cookies(cookies: list[Any]) -> list[dict[str, Any]]:
                 "sameSite": _normalize_same_site(cookie.get("sameSite")),
             }
         )
+    if not normalized:
+        raise ConfigError("DOUYIN_COOKIE 没有有效 Cookie")
     return normalized
 
 
