@@ -129,7 +129,7 @@ systemctl list-timers douyin-sender.timer
 
 ## GitHub Actions
 
-仓库包含 `.github/workflows/send.yml`，使用 GitHub 托管的 Ubuntu Runner。Actions 不读取本地的 `storage-state.json`，需要配置下面两个 Repository Secret。
+仓库包含 `.github/workflows/send.yml`，使用 GitHub 托管的 Ubuntu Runner。Actions 不读取本地的 `storage-state.json`，需要配置下面的 Repository Secret。
 
 ### 1. 获取抖音 Cookie
 
@@ -166,7 +166,7 @@ systemctl list-timers douyin-sender.timer
 Settings -> Secrets and variables -> Actions -> New repository secret
 ```
 
-添加两个 Secret：
+抖音发送需要两个 Secret：
 
 | 名称 | 内容 |
 | --- | --- |
@@ -175,7 +175,20 @@ Settings -> Secrets and variables -> Actions -> New repository secret
 
 Secret 名称必须完全一致。旧的 `DOUYIN_STORAGE_STATE` 和 `DOUYIN_STORAGE_STATE_GZIP_B64` 已不再使用，可以删除。
 
-### 3. 手动检查
+### 3. 配置钉钉机器人通知（可选）
+
+在钉钉群中添加“自定义机器人”，安全设置选择“加签”。然后再添加两个 GitHub Secret：
+
+| 名称 | 内容 |
+| --- | --- |
+| `DINGTALK_WEBHOOK` | 机器人的完整 Webhook 地址，包含 `access_token` |
+| `DINGTALK_SECRET` | 加签密钥，通常以 `SEC` 开头 |
+
+这两个 Secret 必须同时配置。每次运行结束后，机器人会发送 Markdown 通知，包括运行模式、成功名单、失败名单、每人的发送数量和失败原因。登录检查失败时也会通知。
+
+失败截图会保存到本次 GitHub Actions 的 Artifacts。钉钉自定义 Webhook 机器人不支持直接上传本地图片附件，因此通知中会列出截图文件名，并提供本次 Actions 运行链接用于下载截图。
+
+### 4. 手动检查
 
 进入仓库的 Actions 页面：
 
@@ -185,7 +198,7 @@ Actions -> Send Douyin Messages -> Run workflow
 
 如果首次进入 Actions 页面，先点击 `I understand my workflows, go ahead and enable them`。第一次运行保持 `dry_run=true`，它只验证登录状态和好友，不发送消息。运行失败时，在该次任务的 `Artifacts` 中下载诊断文件并查看截图。
 
-### 4. 正式发送和定时执行
+### 5. 正式发送和定时执行
 
 dry-run 成功后，再手动运行一次并设置 `dry_run=false`。工作流还会在每天 UTC 00:00，即北京时间 08:00 自动正式发送；GitHub 的定时任务可能延迟。
 
@@ -206,6 +219,8 @@ Linux systemd 和 GitHub Actions schedule 不要同时启用，否则两个机�
 ```dotenv
 DOUYIN_STORAGE_STATE=storage-state.json
 DOUYIN_COOKIE=
+DINGTALK_WEBHOOK=
+DINGTALK_SECRET=
 TASK_CONFIG=config.json
 HEADLESS=false
 BROWSER_PATH=

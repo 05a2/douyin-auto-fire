@@ -19,6 +19,10 @@ def load_settings(env_file: str | Path | None = None) -> Settings:
     task_path = Path(os.getenv("TASK_CONFIG", "config.json")).expanduser()
     artifacts_dir = Path(os.getenv("ARTIFACTS_DIR", "artifacts")).expanduser()
     default_state = Path("storage-state.json")
+    dingtalk_webhook = _optional_env("DINGTALK_WEBHOOK")
+    dingtalk_secret = _optional_env("DINGTALK_SECRET")
+    if bool(dingtalk_webhook) != bool(dingtalk_secret):
+        raise ConfigError("DINGTALK_WEBHOOK 和 DINGTALK_SECRET 必须同时配置")
     return Settings(
         task_config_path=task_path,
         storage_state=_optional_env("DOUYIN_STORAGE_STATE") or (str(default_state) if default_state.is_file() else None),
@@ -27,6 +31,8 @@ def load_settings(env_file: str | Path | None = None) -> Settings:
         browser_path=_optional_env("BROWSER_PATH"),
         artifacts_dir=artifacts_dir,
         trace=_parse_bool(os.getenv("TRACE", "true"), "TRACE"),
+        dingtalk_webhook=dingtalk_webhook,
+        dingtalk_secret=dingtalk_secret,
     )
 
 

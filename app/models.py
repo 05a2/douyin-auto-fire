@@ -52,6 +52,8 @@ class Settings:
     browser_path: str | None
     artifacts_dir: Path
     trace: bool
+    dingtalk_webhook: str | None = None
+    dingtalk_secret: str | None = None
 
 
 @dataclass(frozen=True)

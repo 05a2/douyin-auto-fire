@@ -15,7 +15,8 @@ from app.browser import AuthenticationError, RiskControlError, open_douyin, open
 from app.config import ConfigError, load_settings, load_task
 from app.douyin import DouyinChat
 from app.history import AlreadyRunningError, History, run_lock
-from app.models import TargetResult
+from app.models import Settings, TargetResult
+from app.notifier import send_dingtalk_notification
 from app.sender import send_message
 
 
@@ -34,61 +35,106 @@ async def run(dry_run: bool = False, env_file: str | None = None) -> int:
     history = History(settings.artifacts_dir / "history.json")
     run_date = history.run_date(task.timezone)
     results: list[TargetResult] = []
-    async with open_douyin(settings) as session:
-        page = session.page
-        trace_saved = False
-        try:
-            await open_private_messages(page)
-        except (AuthenticationError, RiskControlError):
-            await _screenshot(page, settings.artifacts_dir, "login")
-            if settings.trace:
-                await save_trace(session, _trace_path(settings.artifacts_dir))
-                trace_saved = True
-            raise
-
-        chat = DouyinChat(page)
-        for index, target in enumerate(task.targets):
-            sent = 0
+    screenshots: list[Path] = []
+    fatal_error: Exception | None = None
+    try:
+        async with open_douyin(settings) as session:
+            page = session.page
+            trace_saved = False
             try:
-                LOGGER.info("处理好友: %s", target.name)
-                await chat.open_target(target.name)
-                if not dry_run:
-                    for message_index, message in enumerate(target.messages):
-                        message_id = _message_id(message_index, message)
-                        key = history.key(task.task_id, run_date, target.name, message_id)
-                        if task.prevent_duplicates and history.contains(key):
-                            LOGGER.info("跳过当天已处理或结果不确定的消息: %s #%d", target.name, message_index + 1)
-                            continue
-                        if task.prevent_duplicates:
-                            history.reserve(key)
-                        await verify_login(page, timeout_ms=3_000)
-                        await send_message(page, chat, message, task.stickers)
-                        if task.prevent_duplicates:
-                            history.mark_success(key)
-                        sent += 1
-                results.append(TargetResult(target=target.name, status="success", sent=sent))
+                await open_private_messages(page)
             except Exception as exc:
-                LOGGER.exception("好友处理失败: %s", target.name)
-                await _screenshot(page, settings.artifacts_dir, target.name)
+                LOGGER.exception("打开抖音私信页面失败")
+                screenshot = await _screenshot(page, settings.artifacts_dir, "login")
+                if screenshot:
+                    screenshots.append(screenshot)
                 if settings.trace and not trace_saved:
                     try:
                         await save_trace(session, _trace_path(settings.artifacts_dir))
                         trace_saved = True
                     except Exception:
                         LOGGER.exception("保存 trace 失败")
-                results.append(TargetResult(target=target.name, status="failed", sent=sent, error=str(exc)))
-                if not task.continue_on_error:
-                    break
-            if index < len(task.targets) - 1 and not dry_run:
-                await asyncio.sleep(random.uniform(task.interval_min, task.interval_max))
+                label = "登录检查" if isinstance(exc, (AuthenticationError, RiskControlError)) else "运行检查"
+                results.append(TargetResult(target=label, status="failed", error=str(exc)))
+                fatal_error = exc
 
-        if settings.trace and not trace_saved:
-            await session.context.tracing.stop()
+            if fatal_error is None:
+                chat = DouyinChat(page)
+                for index, target in enumerate(task.targets):
+                    sent = 0
+                    try:
+                        LOGGER.info("处理好友: %s", target.name)
+                        await chat.open_target(target.name)
+                        if not dry_run:
+                            for message_index, message in enumerate(target.messages):
+                                message_id = _message_id(message_index, message)
+                                key = history.key(task.task_id, run_date, target.name, message_id)
+                                if task.prevent_duplicates and history.contains(key):
+                                    LOGGER.info(
+                                        "跳过当天已处理或结果不确定的消息: %s #%d",
+                                        target.name,
+                                        message_index + 1,
+                                    )
+                                    continue
+                                if task.prevent_duplicates:
+                                    history.reserve(key)
+                                await verify_login(page, timeout_ms=3_000)
+                                await send_message(page, chat, message, task.stickers)
+                                if task.prevent_duplicates:
+                                    history.mark_success(key)
+                                sent += 1
+                        results.append(TargetResult(target=target.name, status="success", sent=sent))
+                    except (AuthenticationError, RiskControlError) as exc:
+                        LOGGER.exception("处理好友时登录状态失效: %s", target.name)
+                        screenshot = await _screenshot(page, settings.artifacts_dir, f"{index + 1}-{target.name}")
+                        if screenshot:
+                            screenshots.append(screenshot)
+                        if settings.trace and not trace_saved:
+                            try:
+                                await save_trace(session, _trace_path(settings.artifacts_dir))
+                                trace_saved = True
+                            except Exception:
+                                LOGGER.exception("保存 trace 失败")
+                        results.append(TargetResult(target=target.name, status="failed", sent=sent, error=str(exc)))
+                        fatal_error = exc
+                        break
+                    except Exception as exc:
+                        LOGGER.exception("好友处理失败: %s", target.name)
+                        screenshot = await _screenshot(page, settings.artifacts_dir, f"{index + 1}-{target.name}")
+                        if screenshot:
+                            screenshots.append(screenshot)
+                        if settings.trace and not trace_saved:
+                            try:
+                                await save_trace(session, _trace_path(settings.artifacts_dir))
+                                trace_saved = True
+                            except Exception:
+                                LOGGER.exception("保存 trace 失败")
+                        results.append(TargetResult(target=target.name, status="failed", sent=sent, error=str(exc)))
+                        if not task.continue_on_error:
+                            break
+                    if index < len(task.targets) - 1 and not dry_run:
+                        await asyncio.sleep(random.uniform(task.interval_min, task.interval_max))
+
+            if settings.trace and not trace_saved:
+                try:
+                    await session.context.tracing.stop()
+                except Exception as exc:
+                    LOGGER.exception("停止 trace 失败")
+                    if fatal_error is None:
+                        fatal_error = exc
+                        results.append(TargetResult(target="运行收尾", status="failed", error=str(exc)))
+    except Exception as exc:
+        if fatal_error is None:
+            fatal_error = exc
+            results.append(TargetResult(target="运行检查", status="failed", error=str(exc)))
 
     _write_results(settings.artifacts_dir, task.task_id, dry_run, results)
+    await _notify_dingtalk(settings, task.task_id, dry_run, results, screenshots)
     succeeded = sum(result.status == "success" for result in results)
     failed = sum(result.status == "failed" for result in results)
     LOGGER.info("执行结束: 成功 %d，失败 %d", succeeded, failed)
+    if fatal_error is not None:
+        raise fatal_error
     return 1 if failed else 0
 
 
@@ -122,15 +168,17 @@ def _configure_logging(artifacts_dir: Path) -> None:
     LOGGER.addHandler(stream_handler)
 
 
-async def _screenshot(page, artifacts_dir: Path, label: str) -> None:
+async def _screenshot(page, artifacts_dir: Path, label: str) -> Path | None:
     safe_label = re.sub(r"[^A-Za-z0-9_.-]+", "_", label).strip("_") or "failure"
     directory = artifacts_dir / "screenshots"
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / f"{datetime.now():%Y%m%d-%H%M%S}-{safe_label}.png"
     try:
         await page.screenshot(path=path, full_page=True)
+        return path
     except Exception:
         LOGGER.exception("保存截图失败")
+        return None
 
 
 def _write_results(artifacts_dir: Path, task_id: str, dry_run: bool, results: list[TargetResult]) -> None:
@@ -141,6 +189,29 @@ def _write_results(artifacts_dir: Path, task_id: str, dry_run: bool, results: li
         "results": [asdict(result) for result in results],
     }
     (artifacts_dir / "result.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+async def _notify_dingtalk(
+    settings: Settings,
+    task_id: str,
+    dry_run: bool,
+    results: list[TargetResult],
+    screenshots: list[Path],
+) -> None:
+    if not settings.dingtalk_webhook or not settings.dingtalk_secret:
+        return
+    try:
+        await send_dingtalk_notification(
+            settings.dingtalk_webhook,
+            settings.dingtalk_secret,
+            task_id,
+            dry_run,
+            results,
+            screenshots,
+        )
+        LOGGER.info("钉钉通知发送成功")
+    except Exception:
+        LOGGER.exception("钉钉通知发送失败，不影响本次任务结果")
 
 
 def _trace_path(artifacts_dir: Path) -> Path:
