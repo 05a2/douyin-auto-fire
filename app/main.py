@@ -1,0 +1,150 @@
+from __future__ import annotations
+
+import argparse
+import asyncio
+import json
+import logging
+import random
+import re
+import hashlib
+from dataclasses import asdict
+from datetime import datetime
+from pathlib import Path
+
+from app.browser import AuthenticationError, RiskControlError, open_douyin, save_trace, verify_login
+from app.config import ConfigError, load_settings, load_task
+from app.douyin import DouyinChat
+from app.history import AlreadyRunningError, History, run_lock
+from app.models import TargetResult
+from app.sender import send_message
+
+
+LOGGER = logging.getLogger("douyin_sender")
+
+
+async def run(dry_run: bool = False, env_file: str | None = None) -> int:
+    settings = load_settings(env_file)
+    task = load_task(settings)
+    settings.artifacts_dir.mkdir(parents=True, exist_ok=True)
+    _configure_logging(settings.artifacts_dir)
+
+    if not settings.storage_state and not settings.cookie:
+        raise ConfigError("必须配置 DOUYIN_STORAGE_STATE 或 DOUYIN_COOKIE")
+
+    history = History(settings.artifacts_dir / "history.json")
+    run_date = history.run_date(task.timezone)
+    results: list[TargetResult] = []
+    async with open_douyin(settings) as session:
+        page = session.page
+        trace_saved = False
+        try:
+            await verify_login(page)
+        except (AuthenticationError, RiskControlError):
+            await _screenshot(page, settings.artifacts_dir, "login")
+            if settings.trace:
+                await save_trace(session, _trace_path(settings.artifacts_dir))
+                trace_saved = True
+            raise
+
+        chat = DouyinChat(page)
+        for index, target in enumerate(task.targets):
+            sent = 0
+            try:
+                LOGGER.info("处理好友: %s", target.name)
+                await chat.open_target(target.name)
+                if not dry_run:
+                    for message_index, message in enumerate(target.messages):
+                        message_id = _message_id(message_index, message)
+                        key = history.key(task.task_id, run_date, target.name, message_id)
+                        if history.contains(key):
+                            LOGGER.info("跳过当天已处理或结果不确定的消息: %s #%d", target.name, message_index + 1)
+                            continue
+                        history.reserve(key)
+                        await verify_login(page, timeout_ms=3_000)
+                        await send_message(page, chat, message, task.stickers)
+                        history.mark_success(key)
+                        sent += 1
+                results.append(TargetResult(target=target.name, status="success", sent=sent))
+            except Exception as exc:
+                LOGGER.exception("好友处理失败: %s", target.name)
+                await _screenshot(page, settings.artifacts_dir, target.name)
+                if settings.trace and not trace_saved:
+                    try:
+                        await save_trace(session, _trace_path(settings.artifacts_dir))
+                        trace_saved = True
+                    except Exception:
+                        LOGGER.exception("保存 trace 失败")
+                results.append(TargetResult(target=target.name, status="failed", sent=sent, error=str(exc)))
+                if not task.continue_on_error:
+                    break
+            if index < len(task.targets) - 1 and not dry_run:
+                await asyncio.sleep(random.uniform(task.interval_min, task.interval_max))
+
+        if settings.trace and not trace_saved:
+            await session.context.tracing.stop()
+
+    _write_results(settings.artifacts_dir, task.task_id, dry_run, results)
+    succeeded = sum(result.status == "success" for result in results)
+    failed = sum(result.status == "failed" for result in results)
+    LOGGER.info("执行结束: 成功 %d，失败 %d", succeeded, failed)
+    return 1 if failed else 0
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="向多个抖音好友发送配置的消息")
+    parser.add_argument("--dry-run", action="store_true", help="只验证登录和好友，不发送消息")
+    parser.add_argument("--env-file", help="指定 .env 文件路径")
+    args = parser.parse_args()
+    try:
+        settings = load_settings(args.env_file)
+        with run_lock(settings.artifacts_dir / "run.lock"):
+            return asyncio.run(run(dry_run=args.dry_run, env_file=args.env_file))
+    except (ConfigError, AuthenticationError, RiskControlError, AlreadyRunningError) as exc:
+        print(f"错误: {exc}")
+        return 2
+    except KeyboardInterrupt:
+        print("任务已取消")
+        return 130
+
+
+def _configure_logging(artifacts_dir: Path) -> None:
+    if LOGGER.handlers:
+        return
+    LOGGER.setLevel(logging.INFO)
+    formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+    file_handler = logging.FileHandler(artifacts_dir / "run.log", encoding="utf-8")
+    file_handler.setFormatter(formatter)
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(formatter)
+    LOGGER.addHandler(file_handler)
+    LOGGER.addHandler(stream_handler)
+
+
+async def _screenshot(page, artifacts_dir: Path, label: str) -> None:
+    safe_label = re.sub(r"[^A-Za-z0-9_.-]+", "_", label).strip("_") or "failure"
+    directory = artifacts_dir / "screenshots"
+    directory.mkdir(parents=True, exist_ok=True)
+    path = directory / f"{datetime.now():%Y%m%d-%H%M%S}-{safe_label}.png"
+    try:
+        await page.screenshot(path=path, full_page=True)
+    except Exception:
+        LOGGER.exception("保存截图失败")
+
+
+def _write_results(artifacts_dir: Path, task_id: str, dry_run: bool, results: list[TargetResult]) -> None:
+    payload = {
+        "task_id": task_id,
+        "dry_run": dry_run,
+        "finished_at": datetime.now().astimezone().isoformat(),
+        "results": [asdict(result) for result in results],
+    }
+    (artifacts_dir / "result.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _trace_path(artifacts_dir: Path) -> Path:
+    return artifacts_dir / "traces" / f"{datetime.now():%Y%m%d-%H%M%S}.zip"
+
+
+def _message_id(index, message) -> str:
+    payload = json.dumps(asdict(message), ensure_ascii=False, sort_keys=True, default=str)
+    return f"{index}-{hashlib.sha256(payload.encode('utf-8')).hexdigest()[:12]}"
