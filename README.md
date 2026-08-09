@@ -2,7 +2,7 @@
 
 使用 Python 和 Playwright 自动打开抖音网页版，依次向多个好友发送文字、图片或抖音原生表情。支持 Windows、Linux 和 GitHub Actions。
 
-程序登录后直接打开抖音官方聊天页 `https://www.douyin.com/chat?isPopup=1`，不依赖首页的私信按钮。
+程序注入登录 Cookie 后直接打开抖音官方聊天页 `https://www.douyin.com/chat`，不依赖首页的私信按钮或首页登录标记。
 
 ## 最简单用法
 

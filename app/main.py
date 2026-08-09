@@ -38,7 +38,6 @@ async def run(dry_run: bool = False, env_file: str | None = None) -> int:
         page = session.page
         trace_saved = False
         try:
-            await verify_login(page)
             await open_private_messages(page)
         except (AuthenticationError, RiskControlError):
             await _screenshot(page, settings.artifacts_dir, "login")

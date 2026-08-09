@@ -9,7 +9,7 @@ from playwright.async_api import Browser, BrowserContext, Page, Playwright, asyn
 
 from app.config import ConfigError, parse_auth_json
 from app.models import Settings
-from app.selectors import DOUYIN_CHAT_URL, DOUYIN_URL, LOGIN_MARKERS, LOGIN_REQUIRED_MARKERS, RISK_MARKERS
+from app.selectors import DOUYIN_CHAT_URL, LOGIN_MARKERS, LOGIN_REQUIRED_MARKERS, RISK_MARKERS
 
 
 class AuthenticationError(RuntimeError):
@@ -52,7 +52,6 @@ async def open_douyin(settings: Settings) -> AsyncIterator[BrowserSession]:
             await context.add_cookies(_normalize_cookies(cookies))
 
         page = await context.new_page()
-        await page.goto(DOUYIN_URL, wait_until="domcontentloaded", timeout=45_000)
         if settings.trace:
             await context.tracing.start(screenshots=True, snapshots=True, sources=False)
         yield BrowserSession(page=page, context=context)

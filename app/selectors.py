@@ -1,5 +1,4 @@
-DOUYIN_URL = "https://www.douyin.com/"
-DOUYIN_CHAT_URL = "https://www.douyin.com/chat?isPopup=1"
+DOUYIN_CHAT_URL = "https://www.douyin.com/chat"
 
 # Ordered alternatives keep page-specific changes isolated from the workflow.
 LOGIN_MARKERS = (

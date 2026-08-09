@@ -1,7 +1,21 @@
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 
-from app.browser import _normalize_cookies
+from app.browser import _normalize_cookies, open_private_messages
 from app.config import ConfigError
+from app.selectors import DOUYIN_CHAT_URL
+
+
+@pytest.mark.asyncio
+async def test_opens_chat_directly_before_checking_login() -> None:
+    page = MagicMock()
+    page.goto = AsyncMock()
+
+    with patch("app.browser._any_visible", new=AsyncMock(side_effect=[False, False, True])):
+        await open_private_messages(page)
+
+    page.goto.assert_awaited_once_with(DOUYIN_CHAT_URL, wait_until="domcontentloaded", timeout=45_000)
 
 
 def test_normalizes_cookie_editor_export() -> None:
