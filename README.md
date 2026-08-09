@@ -129,12 +129,67 @@ systemctl list-timers douyin-sender.timer
 
 ## GitHub Actions
 
-仓库包含 `.github/workflows/send.yml`：
+仓库包含 `.github/workflows/send.yml`，使用 GitHub 托管的 Ubuntu Runner。Actions 不读取本地的 `storage-state.json`，需要配置下面两个 Repository Secret。
 
-- 默认 UTC 00:00，即北京时间 08:00 定时触发。
-- 支持 Actions 页面手动触发和 dry-run。
-- 需要创建 `DOUYIN_STORAGE_STATE` Secret，值为 `storage-state.json` 的完整 JSON 内容。
-- 需要创建 `DOUYIN_CONFIG` Secret，值为 `config.json` 的完整 JSON 内容。
+### 1. 获取抖音 Cookie
+
+1. 在 Windows 的 Chrome 或 Edge 中打开 `https://www.douyin.com/chat` 并登录。
+2. 安装 Cookie-Editor 浏览器扩展。
+3. 保持抖音聊天页打开，点击 Cookie-Editor，选择 `Export`，再选择 `JSON`。
+4. 复制导出的完整 JSON 数组。正确内容以 `[` 开头、以 `]` 结尾，不是请求头中的 `name=value` Cookie 字符串，也不是 `storage-state.json`。
+
+导出内容的结构类似：
+
+```json
+[
+  {
+    "domain": ".douyin.com",
+    "expirationDate": 1800175766.87008,
+    "httpOnly": false,
+    "name": "UIFID",
+    "path": "/",
+    "sameSite": "no_restriction",
+    "secure": true,
+    "session": false,
+    "value": "实际 Cookie 值"
+  }
+]
+```
+
+不要使用上面的示例值。必须导出自己已登录账号的完整 Cookie 数组，不能只保留 `UIFID` 一项。
+
+### 2. 配置 GitHub Secrets
+
+进入自己的 GitHub 仓库：
+
+```text
+Settings -> Secrets and variables -> Actions -> New repository secret
+```
+
+添加两个 Secret：
+
+| 名称 | 内容 |
+| --- | --- |
+| `DOUYIN_COOKIE` | Cookie-Editor 导出的完整 JSON 数组 |
+| `DOUYIN_CONFIG` | 本地 `config.json` 的完整 JSON 内容 |
+
+Secret 名称必须完全一致。旧的 `DOUYIN_STORAGE_STATE` 和 `DOUYIN_STORAGE_STATE_GZIP_B64` 已不再使用，可以删除。
+
+### 3. 手动检查
+
+进入仓库的 Actions 页面：
+
+```text
+Actions -> Send Douyin Messages -> Run workflow
+```
+
+如果首次进入 Actions 页面，先点击 `I understand my workflows, go ahead and enable them`。第一次运行保持 `dry_run=true`，它只验证登录状态和好友，不发送消息。运行失败时，在该次任务的 `Artifacts` 中下载诊断文件并查看截图。
+
+### 4. 正式发送和定时执行
+
+dry-run 成功后，再手动运行一次并设置 `dry_run=false`。工作流还会在每天 UTC 00:00，即北京时间 08:00 自动正式发送；GitHub 的定时任务可能延迟。
+
+Cookie 过期、退出登录或被抖音撤销后，需要在 Windows 浏览器重新登录、重新通过 Cookie-Editor 导出，并覆盖 `DOUYIN_COOKIE` Secret。
 
 GitHub-hosted runner 的 IP 和浏览器环境会变化，可能触发抖音验证。正式运行优先选择 Linux self-hosted runner，并将工作流的 `runs-on` 改为：
 
@@ -169,7 +224,7 @@ python -m pytest -q
 
 ## 安全
 
-- `storage-state.json` 等同登录凭证，不要提交或发送给别人。
+- `storage-state.json` 和 Cookie-Editor 导出的 Cookie 等同登录凭证，不要提交或发送给别人。
 - `.env`、`config.json`、`storage-state.json` 已加入 `.gitignore`。
 - 截图和 trace 可能包含聊天内容，失败产物应短期保存。
 - 出现验证码或安全验证时程序停止，不尝试绕过平台风控。
