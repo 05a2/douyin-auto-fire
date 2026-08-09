@@ -30,6 +30,11 @@ jobs:
       - run: pip install -r requirements.txt
       - run: python -m playwright install --with-deps chromium
       - name: Write protected configuration
+       - name: Write login state
+        shell: bash
+        run: |
+          printf '%s' "$DOUYIN_STORAGE_STATE_GZIP_B64" | base64 --decode | gzip -d > storage-state.json
+          chmod 600 storage-state.json
         shell: bash
         run: printf '%s' "$DOUYIN_CONFIG" > config.json
       - name: Run
