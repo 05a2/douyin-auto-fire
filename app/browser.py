@@ -3,7 +3,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import AsyncIterator
+from typing import Any, AsyncIterator
 
 from playwright.async_api import Browser, BrowserContext, Page, Playwright, async_playwright
 
@@ -49,7 +49,7 @@ async def open_douyin(settings: Settings) -> AsyncIterator[BrowserSession]:
             cookies = parse_auth_json(settings.cookie, "DOUYIN_COOKIE")
             if not isinstance(cookies, list):
                 raise ConfigError("DOUYIN_COOKIE 必须是 Cookie 数组")
-            await context.add_cookies(cookies)
+            await context.add_cookies(_normalize_cookies(cookies))
 
         page = await context.new_page()
         await page.goto(DOUYIN_URL, wait_until="domcontentloaded", timeout=45_000)
@@ -98,3 +98,48 @@ async def _any_visible(page: Page, selectors: tuple[str, ...], timeout_ms: int) 
         except Exception:
             continue
     return False
+
+
+def _normalize_cookies(cookies: list[Any]) -> list[dict[str, Any]]:
+    normalized = []
+    for index, cookie in enumerate(cookies):
+        if not isinstance(cookie, dict):
+            raise ConfigError(f"DOUYIN_COOKIE[{index}] 必须是对象")
+
+        name = cookie.get("name")
+        value = cookie.get("value")
+        domain = cookie.get("domain")
+        if not isinstance(name, str) or not name or not isinstance(value, str):
+            raise ConfigError(f"DOUYIN_COOKIE[{index}] 缺少有效的 name 或 value")
+        if not isinstance(domain, str) or not domain:
+            raise ConfigError(f"DOUYIN_COOKIE[{index}] 缺少有效的 domain")
+
+        expires = cookie.get("expires", cookie.get("expirationDate", -1))
+        if cookie.get("session") is True:
+            expires = -1
+        if isinstance(expires, bool) or not isinstance(expires, (int, float)):
+            expires = -1
+
+        normalized.append(
+            {
+                "name": name,
+                "value": value,
+                "domain": domain,
+                "path": cookie.get("path") if isinstance(cookie.get("path"), str) else "/",
+                "expires": expires,
+                "httpOnly": bool(cookie.get("httpOnly", False)),
+                "secure": bool(cookie.get("secure", False)),
+                "sameSite": _normalize_same_site(cookie.get("sameSite")),
+            }
+        )
+    return normalized
+
+
+def _normalize_same_site(value: Any) -> str:
+    mapping = {
+        "strict": "Strict",
+        "lax": "Lax",
+        "none": "None",
+        "no_restriction": "None",
+    }
+    return mapping.get(str(value).lower(), "Lax")

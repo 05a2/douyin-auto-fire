@@ -21,7 +21,7 @@ jobs:
     permissions:
       contents: read
     env:
-      DOUYIN_STORAGE_STATE_GZIP_B64: ${{ secrets.DOUYIN_STORAGE_STATE_GZIP_B64 }}
+      DOUYIN_COOKIE: ${{ secrets.DOUYIN_COOKIE }}
       DOUYIN_CONFIG: ${{ secrets.DOUYIN_CONFIG }}
       HEADLESS: "true"
     steps:
@@ -34,11 +34,6 @@ jobs:
       - name: Write protected configuration
         shell: bash
         run: printf '%s' "$DOUYIN_CONFIG" > config.json
-      - name: Write login state
-        shell: bash
-        run: |
-          printf '%s' "$DOUYIN_STORAGE_STATE_GZIP_B64" | base64 --decode | gzip -d > storage-state.json
-          chmod 600 storage-state.json
       - name: Run
         shell: bash
         run: |
