@@ -71,9 +71,12 @@ def load_task(settings: Settings) -> TaskConfig:
         interval_min=interval_min,
         interval_max=interval_max,
         continue_on_error=raw.get("continue_on_error", True),
+        prevent_duplicates=raw.get("prevent_duplicates", False),
     )
     if not isinstance(task.continue_on_error, bool):
         raise ConfigError("continue_on_error 必须是布尔值")
+    if not isinstance(task.prevent_duplicates, bool):
+        raise ConfigError("prevent_duplicates 必须是布尔值")
 
     _validate_stickers(task)
     return task
@@ -206,4 +209,3 @@ def _number(value: Any, label: str) -> float:
     if isinstance(value, bool) or not isinstance(value, (int, float)):
         raise ConfigError(f"{label} 必须是数字")
     return float(value)
-

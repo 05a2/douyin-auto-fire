@@ -11,7 +11,7 @@ from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 
-from app.browser import AuthenticationError, RiskControlError, open_douyin, save_trace, verify_login
+from app.browser import AuthenticationError, RiskControlError, open_douyin, open_private_messages, save_trace, verify_login
 from app.config import ConfigError, load_settings, load_task
 from app.douyin import DouyinChat
 from app.history import AlreadyRunningError, History, run_lock
@@ -39,6 +39,7 @@ async def run(dry_run: bool = False, env_file: str | None = None) -> int:
         trace_saved = False
         try:
             await verify_login(page)
+            await open_private_messages(page)
         except (AuthenticationError, RiskControlError):
             await _screenshot(page, settings.artifacts_dir, "login")
             if settings.trace:
@@ -56,13 +57,15 @@ async def run(dry_run: bool = False, env_file: str | None = None) -> int:
                     for message_index, message in enumerate(target.messages):
                         message_id = _message_id(message_index, message)
                         key = history.key(task.task_id, run_date, target.name, message_id)
-                        if history.contains(key):
+                        if task.prevent_duplicates and history.contains(key):
                             LOGGER.info("跳过当天已处理或结果不确定的消息: %s #%d", target.name, message_index + 1)
                             continue
-                        history.reserve(key)
+                        if task.prevent_duplicates:
+                            history.reserve(key)
                         await verify_login(page, timeout_ms=3_000)
                         await send_message(page, chat, message, task.stickers)
-                        history.mark_success(key)
+                        if task.prevent_duplicates:
+                            history.mark_success(key)
                         sent += 1
                 results.append(TargetResult(target=target.name, status="success", sent=sent))
             except Exception as exc:

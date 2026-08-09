@@ -2,6 +2,8 @@
 
 使用 Python 和 Playwright 自动打开抖音网页版，依次向多个好友发送文字、图片或抖音原生表情。支持 Windows、Linux 和 GitHub Actions。
 
+程序登录后直接打开抖音官方聊天页 `https://www.douyin.com/chat?isPopup=1`，不依赖首页的私信按钮。
+
 ## 最简单用法
 
 只需要两个本地文件：
@@ -16,7 +18,7 @@ storage-state.json   抖音登录状态
 Windows：
 
 ```powershell
-py -3.11 -m venv .venv
+py -3.12 -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
 .venv\Scripts\python.exe -m playwright install chromium
 ```
@@ -32,7 +34,7 @@ python3 -m venv .venv
 ### 2. 登录一次
 
 ```bash
-python scripts/login.py
+.venv\Scripts\python.exe scripts\login.py
 ```
 
 在浏览器完成登录并进入私信页面，回到终端按 Enter。程序会生成 `storage-state.json`。
@@ -77,7 +79,7 @@ python run.py --dry-run
 python run.py
 ```
 
-同一个任务在同一天再次运行时，已成功或发送结果不确定的消息都会跳过，避免网络超时后重复发送。确认需要重发时，人工检查聊天记录后再删除 `artifacts/history.json` 中对应记录。
+默认允许重复执行和重复发送。需要开启当天防重复时，在 `config.json` 中配置 `"prevent_duplicates": true`；开启后，已成功或发送结果不确定的消息都会跳过。
 
 ## 原生表情
 

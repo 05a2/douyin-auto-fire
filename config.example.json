@@ -7,5 +7,6 @@
   "stickers": {
     "比心": {"label": "比心", "category": "常用", "fallback_index": 3}
   },
-  "send_interval_seconds": {"min": 3, "max": 8}
+  "send_interval_seconds": {"min": 3, "max": 8},
+  "prevent_duplicates": false
 }

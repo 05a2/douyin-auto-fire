@@ -40,6 +40,7 @@ class TaskConfig:
     interval_min: float
     interval_max: float
     continue_on_error: bool
+    prevent_duplicates: bool
 
 
 @dataclass(frozen=True)

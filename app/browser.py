@@ -9,7 +9,7 @@ from playwright.async_api import Browser, BrowserContext, Page, Playwright, asyn
 
 from app.config import ConfigError, parse_auth_json
 from app.models import Settings
-from app.selectors import CHAT_URL, LOGIN_MARKERS, LOGIN_REQUIRED_MARKERS, RISK_MARKERS
+from app.selectors import DOUYIN_CHAT_URL, DOUYIN_URL, LOGIN_MARKERS, LOGIN_REQUIRED_MARKERS, RISK_MARKERS
 
 
 class AuthenticationError(RuntimeError):
@@ -52,7 +52,7 @@ async def open_douyin(settings: Settings) -> AsyncIterator[BrowserSession]:
             await context.add_cookies(cookies)
 
         page = await context.new_page()
-        await page.goto(CHAT_URL, wait_until="domcontentloaded", timeout=45_000)
+        await page.goto(DOUYIN_URL, wait_until="domcontentloaded", timeout=45_000)
         if settings.trace:
             await context.tracing.start(screenshots=True, snapshots=True, sources=False)
         yield BrowserSession(page=page, context=context)
@@ -72,6 +72,16 @@ async def verify_login(page: Page, timeout_ms: int = 15_000) -> None:
         raise AuthenticationError("抖音登录状态已失效")
     if not await _any_visible(page, LOGIN_MARKERS, timeout_ms=timeout_ms):
         raise AuthenticationError("未检测到抖音私信页面，登录状态可能失效或页面结构已变化")
+
+
+async def open_private_messages(page: Page, timeout_ms: int = 15_000) -> None:
+    await page.goto(DOUYIN_CHAT_URL, wait_until="domcontentloaded", timeout=45_000)
+    if await _any_visible(page, RISK_MARKERS, timeout_ms=2_000):
+        raise RiskControlError("抖音私信页面要求进行安全验证，任务已停止")
+    if await _any_visible(page, LOGIN_REQUIRED_MARKERS, timeout_ms=2_000):
+        raise AuthenticationError("进入抖音私信页面后登录状态失效")
+    if not await _any_visible(page, ('input[placeholder*="搜索"]', '[role="textbox"][placeholder*="搜索"]'), timeout_ms):
+        raise AuthenticationError("已进入抖音私信页面，但没有检测到好友搜索框")
 
 
 async def save_trace(session: BrowserSession, path: Path) -> None:

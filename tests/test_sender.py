@@ -1,27 +1,32 @@
-from pathlib import Path
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.models import Message, Sticker
+from app.models import Message
 from app.sender import send_message
 
 
 @pytest.mark.asyncio
 async def test_random_message_delegates_to_selected_choice(monkeypatch) -> None:
     editor = AsyncMock()
-    editor.page.wait_for_timeout = AsyncMock()
+    page = MagicMock()
+    message_items = MagicMock()
+    message_items.count = AsyncMock(return_value=0)
+    page.locator.return_value = message_items
+    page.keyboard.insert_text = AsyncMock()
+    page.keyboard.press = AsyncMock()
+    page.wait_for_function = AsyncMock()
+    editor.page = page
     chat = AsyncMock()
     chat.message_input.return_value = editor
-    page = AsyncMock()
     text = Message(type="text", content="你好")
     message = Message(type="random", choices=(text,))
     monkeypatch.setattr("app.sender.random.choice", lambda choices: choices[0])
 
     await send_message(page, chat, message, {})
 
-    editor.fill.assert_awaited_once_with("你好")
-    editor.press.assert_awaited_once_with("Enter")
+    page.keyboard.insert_text.assert_awaited_once_with("你好")
+    page.keyboard.press.assert_awaited_once_with("Enter")
 
 
 @pytest.mark.asyncio

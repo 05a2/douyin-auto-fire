@@ -1,10 +1,11 @@
-CHAT_URL = "https://www.douyin.com/im"
+DOUYIN_URL = "https://www.douyin.com/"
+DOUYIN_CHAT_URL = "https://www.douyin.com/chat?isPopup=1"
 
 # Ordered alternatives keep page-specific changes isolated from the workflow.
 LOGIN_MARKERS = (
+    'text=私信',
     'input[placeholder*="搜索"]',
     '[role="textbox"][placeholder*="搜索"]',
-    'text=私信',
 )
 LOGIN_REQUIRED_MARKERS = (
     'text=扫码登录',
@@ -21,6 +22,9 @@ SEARCH_INPUTS = (
     '[role="textbox"][placeholder*="搜索"]',
 )
 MESSAGE_INPUTS = (
+    '[data-contents="true"]',
+    '.DraftEditor-editor [contenteditable="true"]',
+    '.DraftEditor-root [contenteditable="true"]',
     '[contenteditable="true"][data-placeholder*="发送消息"]',
     '[contenteditable="true"][aria-label*="消息"]',
     '[contenteditable="true"]',
@@ -28,8 +32,14 @@ MESSAGE_INPUTS = (
 )
 IMAGE_INPUTS = ('input[type="file"][accept*="image"]', 'input[type="file"]')
 STICKER_BUTTONS = (
+    'svg.messageMsgInputiconAction',
     'button[aria-label*="表情"]',
     '[role="button"][aria-label*="表情"]',
     '[title*="表情"]',
 )
-STICKER_PANELS = ('[role="dialog"]', '[class*="emoji"]', '[class*="sticker"]')
+STICKER_PANELS = (
+    '.componentsemojiemojiPanel',
+    '[class*="emojiPanel"]',
+    '[role="dialog"]',
+    '[class*="sticker"]',
+)
