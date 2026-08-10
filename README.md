@@ -1,21 +1,33 @@
-# 抖音多好友定时自动发送
+# 抖音自动续火花
 
-使用 Python 和 Playwright 自动打开抖音网页版，依次向多个好友发送文字、图片或抖音原生表情。支持 Windows、Linux 和 GitHub Actions。
+## 项目简介
 
-程序注入登录 Cookie 后直接打开抖音官方聊天页 `https://www.douyin.com/chat`，不依赖首页的私信按钮或首页登录标记。
+这是一个通过 Playwright 操作抖音网页版、按配置向指定好友发送续火花私信的非官方个人工具。它适合少量指定好友，不适合营销群发或大规模自动化。
 
-## 最简单用法
+使用前请遵守抖音平台规则，并自行承担自动化操作可能带来的账号风险。
 
-只需要两个本地文件：
+## 功能
 
-```text
-config.json          好友和消息
-storage-state.json   抖音登录状态
-```
+- 发送文字和 Unicode Emoji
+- 发送图片
+- 发送抖音原生表情
+- 从候选消息中随机选择一条
+- 串行处理多个好友
+- 使用 `--dry-run` 检查登录状态和好友定位
+- 可选的本地按日防重复
+- 提供 Windows、Linux systemd 和 GitHub Actions 调度入口
 
-### 1. 安装
+图片发送目前缺少可靠的页面结果确认。抖音原生表情依赖页面选择器，属于实验性能力，页面更新后可能失效。
 
-Windows：
+## 环境要求
+
+- Windows 或 Linux
+- 推荐 Python 3.11 或 3.12
+- 可正常访问抖音网页版的网络环境
+
+以下命令都在项目根目录执行，并始终使用 `.venv` 中的 Python，避免与系统 Python 混用。
+
+## Windows 安装
 
 ```powershell
 py -3.12 -m venv .venv
@@ -23,223 +35,267 @@ py -3.12 -m venv .venv
 .venv\Scripts\python.exe -m playwright install chromium
 ```
 
-Linux：
+## Linux 安装
 
 ```bash
 python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+.venv/bin/python -m pip install -r requirements.txt
 .venv/bin/python -m playwright install --with-deps chromium
 ```
 
-### 2. 登录一次
+## 保存登录状态
 
-```bash
+Windows：
+
+```powershell
 .venv\Scripts\python.exe scripts\login.py
 ```
 
-在浏览器完成登录并进入私信页面，回到终端按 Enter。程序会生成 `storage-state.json`。
+Linux：
 
-### 3. 配置好友和消息
+```bash
+.venv/bin/python scripts/login.py
+```
 
-将 `config.example.json` 复制为 `config.json`，只修改好友和消息：
+脚本会打开抖音首页：
+
+1. 在浏览器中完成扫码登录，并确认已经进入抖音首页。
+2. 回到终端按 Enter。
+3. 脚本验证登录后生成 `storage-state.json`。
+
+> `storage-state.json` 等同账号登录凭证。不要提交到 Git、公开内容或发送给他人。
+
+## 最小配置
+
+先复制示例配置。
+
+Windows：
+
+```powershell
+Copy-Item config.example.json config.json
+```
+
+Linux：
+
+```bash
+cp config.example.json config.json
+```
+
+首次运行时，将 `config.json` 缩减为一个测试好友和一条文字消息：
 
 ```json
 {
-  "friends": ["好友A", "好友B"],
+  "friends": ["测试好友昵称"],
   "messages": [
-    {"type": "text", "value": "今天也要开心呀 😊"},
-    {"type": "sticker", "value": "比心"}
-  ],
-  "stickers": {
-    "比心": {"label": "比心", "category": "常用", "fallback_index": 3}
-  },
-  "send_interval_seconds": {"min": 3, "max": 8}
+    {"type": "text", "value": "今天也要记得续火花呀 ✨"}
+  ]
 }
 ```
 
-所有好友收到相同消息。如果不同好友需要不同消息，仍支持旧版 `targets` 高级配置，参考 `config/tasks.example.json`。
+好友名称不是稳定的唯一用户标识，请填写尽量唯一、便于人工确认的昵称。`friends` 中的所有好友会收到相同的 `messages`；如需为不同好友配置不同消息，可参考 `config/tasks.example.json` 中的 `targets` 格式。
 
-消息类型：
-
-```json
-{"type": "text", "value": "你好 😊"}
-{"type": "image", "value": "data/images/test.png"}
-{"type": "sticker", "value": "比心"}
-```
-
-### 4. 先检查，不发送
-
-```bash
-python run.py --dry-run
-```
-
-### 5. 正式发送
-
-```bash
-python run.py
-```
-
-默认允许重复执行和重复发送。需要开启当天防重复时，在 `config.json` 中配置 `"prevent_duplicates": true`；开启后，已成功或发送结果不确定的消息都会跳过。
-
-## 原生表情
-
-原生表情通过抖音表情面板发送，不是图片或 Unicode Emoji。优先用表情的可访问名称定位，`fallback_index` 只是页面没有名称时的备用序号。
-
-首次使用必须设置 `HEADLESS=false`，只配置一个测试好友，观察发送的表情是否正确。抖音页面更新后，可能需要调整 `config.json` 中的表情映射或 `app/selectors.py`。
-
-## 运行产物
-
-```text
-artifacts/run.log       运行日志
-artifacts/result.json   本次结果
-artifacts/history.json  当天防重复记录
-artifacts/screenshots/  失败截图
-artifacts/traces/       失败 trace
-```
-
-`run.lock` 防止同一台机器同时启动两个任务。若进程被强制结束并遗留锁，确认没有发送进程后删除 `artifacts/run.lock`。
-
-## Linux 定时
-
-将项目部署到 `/opt/douyin-auto-sender`，然后安装：
-
-```bash
-sudo useradd --system --home /opt/douyin-auto-sender --shell /usr/sbin/nologin douyin-sender
-sudo chown -R douyin-sender:douyin-sender /opt/douyin-auto-sender
-sudo cp deploy/systemd/douyin-sender.service /etc/systemd/system/
-sudo cp deploy/systemd/douyin-sender.timer /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now douyin-sender.timer
-systemctl list-timers douyin-sender.timer
-```
-
-默认每天本机时间 08:00 执行。修改 `deploy/systemd/douyin-sender.timer` 中的 `OnCalendar` 可更换时间。
-
-## Windows 定时
-
-在任务计划程序中创建每日任务：
-
-```text
-程序：powershell.exe
-参数：-ExecutionPolicy Bypass -File C:\项目路径\scripts\run-windows.ps1
-起始于：项目根目录
-```
-
-设置为“如果任务已在运行，则不启动新实例”。
-
-## GitHub Actions
-
-仓库包含 `.github/workflows/send.yml`，使用 GitHub 托管的 Ubuntu Runner。Actions 不读取本地的 `storage-state.json`，需要配置下面的 Repository Secret。
-
-### 1. 获取抖音 Cookie
-
-1. 在 Windows 的 Chrome 或 Edge 中打开 `https://www.douyin.com/chat` 并登录。
-2. 安装 Cookie-Editor 浏览器扩展。
-3. 保持抖音聊天页打开，点击 Cookie-Editor，选择 `Export`，再选择 `JSON`。
-4. 复制导出的完整 JSON 数组。正确内容以 `[` 开头、以 `]` 结尾，不是请求头中的 `name=value` Cookie 字符串，也不是 `storage-state.json`。
-
-导出内容的结构类似：
+程序默认允许重复执行和重复发送。如需启用本机按日防重复，可在配置顶层加入：
 
 ```json
-[
-  {
-    "domain": ".douyin.com",
-    "expirationDate": 1800175766.87008,
-    "httpOnly": false,
-    "name": "UIFID",
-    "path": "/",
-    "sameSite": "no_restriction",
-    "secure": true,
-    "session": false,
-    "value": "实际 Cookie 值"
+{
+  "prevent_duplicates": true
+}
+```
+
+这是一个偏向“不重发”的本地机制：程序在真正发送前先写入 `unknown` 预留记录，因此预留后即使发送失败或结果不确定，当天也会保守跳过。防重复键包含 `task_id`、配置时区下的当天日期、好友名、消息序号和消息内容哈希；同日修改任务 ID、好友名、消息顺序或内容都可能生成新键并再次发送。启用后当天不要修改或重排任务。记录只保存在当前机器，不能跨机器协调。
+
+## 更多消息类型
+
+文字（可以包含 Unicode Emoji）：
+
+```json
+{"type": "text", "value": "早上好 😊"}
+```
+
+图片：
+
+```json
+{"type": "image", "value": "data/images/streak.png"}
+```
+
+使用根目录的 `config.json` 时，相对路径可按项目根目录填写；支持 PNG、JPG、JPEG、GIF 和 WEBP，文件必须在运行前存在。
+
+抖音原生表情（将下面字段合并到上方最小配置，不是完整的 `config.json`）：
+
+```json
+{
+  "messages": [
+    {"type": "sticker", "value": "比心"}
+  ],
+  "stickers": {
+    "比心": {
+      "label": "比心",
+      "category": "常用",
+      "fallback_index": 0
+    }
   }
-]
+}
 ```
 
-不要使用上面的示例值。必须导出自己已登录账号的完整 Cookie 数组，不能只保留 `UIFID` 一项。
+程序优先按可访问名称查找表情；`fallback_index` 是找不到名称时的备用序号，从 `0` 开始。首次测试原生表情时请保持 `HEADLESS=false`，并观察点击的表情是否正确。
 
-### 2. 配置 GitHub Secrets
+随机选择消息：
 
-进入自己的 GitHub 仓库：
-
-```text
-Settings -> Secrets and variables -> Actions -> New repository secret
+```json
+{
+  "type": "random",
+  "choices": [
+    {"type": "text", "value": "早上好"},
+    {"type": "text", "value": "今天也要开心"}
+  ]
+}
 ```
 
-抖音发送需要两个 Secret：
+`random` 的 `choices` 中不能再嵌套 `random`。
 
-| 名称 | 内容 |
+## dry-run
+
+首次检查时只保留一个测试好友，然后执行：
+
+Windows：
+
+```powershell
+.venv\Scripts\python.exe run.py --dry-run
+```
+
+Linux：
+
+```bash
+.venv/bin/python run.py --dry-run
+```
+
+`--dry-run` 只检查登录状态和好友定位，不发送消息。请在打开的浏览器中人工确认定位的是正确好友。
+
+当前好友搜索可能进行部分昵称匹配，并在存在多个候选时选择第一个结果。因此，dry-run 能降低但不能完全消除误发风险。
+
+如需从指定的 `.env` 文件加载环境变量，可追加 `--env-file PATH`。自定义环境文件（例如 `auth.env`）可能包含登录凭证，且不一定被当前 `.gitignore` 忽略；请将其视为敏感文件，并在提交前检查 `git status`。
+
+## 正式发送
+
+确认单个测试好友定位正确后再正式发送：
+
+Windows：
+
+```powershell
+.venv\Scripts\python.exe run.py
+```
+
+Linux：
+
+```bash
+.venv/bin/python run.py
+```
+
+确认首次真实发送成功后，再逐步增加好友。多个好友按配置顺序串行处理，不会并发发送。
+
+## 运行结果
+
+- `artifacts/run.log`：运行日志
+- `artifacts/result.json`：本次运行的好友级结果
+- `artifacts/history.json`：仅在启用本地防重复并产生记录时出现
+- `artifacts/screenshots/`：失败截图，不一定每次生成
+- `artifacts/traces/`：失败 trace，不一定每次生成
+
+如果任务在日志和结果文件初始化前失败，例如初始配置加载失败或重复运行锁冲突，`artifacts/run.log` 和 `artifacts/result.json` 也可能尚未生成。
+
+退出码按异常发生阶段区分：
+
+| 退出码 | 含义 |
 | --- | --- |
-| `DOUYIN_COOKIE` | Cookie-Editor 导出的完整 JSON 数组 |
-| `DOUYIN_CONFIG` | 本地 `config.json` 的完整 JSON 内容 |
+| `0` | 所有已处理好友成功 |
+| `1` | 至少一个好友处理失败；好友处理阶段再次检查登录或风控失败也归入此类 |
+| `2` | 主流程已捕获的初始配置、初始登录、初始风控或重复运行锁错误 |
+| `130` | 用户中断 |
 
-Secret 名称必须完全一致。旧的 `DOUYIN_STORAGE_STATE` 和 `DOUYIN_STORAGE_STATE_GZIP_B64` 已不再使用，可以删除。
+无效时区、损坏的历史记录等当前未被主流程专门捕获的异常，通常由 Python 以退出码 `1` 结束并显示 traceback。
 
-### 3. 配置钉钉机器人通知（可选）
+## 定时运行
 
-在钉钉群中添加“自定义机器人”，安全设置选择“加签”。然后再添加两个 GitHub Secret：
+仓库提供以下入口：
 
-| 名称 | 内容 |
-| --- | --- |
-| `DINGTALK_WEBHOOK` | 机器人的完整 Webhook 地址，包含 `access_token` |
-| `DINGTALK_SECRET` | 加签密钥，通常以 `SEC` 开头 |
+- Windows：`scripts/run-windows.ps1`，可交给任务计划程序调用
+- Linux：`scripts/run-linux.sh`，或使用 `deploy/systemd/` 中的 service 和 timer
+- GitHub Actions：`.github/workflows/send.yml`
 
-这两个 Secret 必须同时配置。每次运行结束后，机器人会发送 Markdown 通知，包括运行模式、成功名单、失败名单、每人的发送数量和失败原因。登录检查失败时也会通知。
+使用 GitHub Actions 前，必须同时配置 `DOUYIN_STORAGE_STATE` 和 `DOUYIN_CONFIG` 两个 Secrets，分别保存登录状态 JSON 和完整配置 JSON。工作流每天 `00:00 UTC`（北京时间 08:00）由 schedule 触发，并直接正式发送；只有从 Actions 页面手动触发且 `dry_run=true` 时才执行 dry-run。配置定时触发前务必先用手动 dry-run 和单好友真实发送完成核对，避免误启用后直接发送。
 
-失败截图会保存到本次 GitHub Actions 的 Artifacts。钉钉自定义 Webhook 机器人不支持直接上传本地图片附件，因此通知中会列出截图文件名，并提供本次 Actions 运行链接用于下载截图。
+同一账号只应启用一个正式调度器。本地运行锁和防重复记录不能跨机器协调，同时启用 systemd、Windows 任务或 GitHub Actions 可能造成重复发送。
 
-### 4. 手动检查
+GitHub-hosted runner 的 IP 和浏览器环境会变化，可能触发安全验证；失败时上传的 Actions 产物也可能包含隐私。
 
-进入仓库的 Actions 页面：
+## 常见问题
 
-```text
-Actions -> Send Douyin Messages -> Run workflow
-```
+### 登录失效或出现安全验证
 
-如果首次进入 Actions 页面，先点击 `I understand my workflows, go ahead and enable them`。`dry_run` 默认是 `false`，直接执行正式发送；只有需要临时检查登录状态和好友且不发送消息时，才勾选 `dry_run=true`。运行失败时，在该次任务的 `Artifacts` 中下载诊断文件并查看截图。
+重新运行 `scripts/login.py` 保存登录状态。程序不会自动重新登录，也不会绕过验证码、风控或平台限制。
 
-### 5. 正式发送和定时执行
+### 找不到聊天搜索框
 
-手动运行保持默认的 `dry_run=false` 即会正式发送。工作流还会在每天 UTC 00:00，即北京时间 08:00 自动正式发送；GitHub 的定时任务可能延迟。
+确认账号已登录且抖音私信页面可以正常打开。若仍失败，抖音页面结构可能已经变化，请结合失败截图和 trace 检查选择器。
 
-Cookie 过期、退出登录或被抖音撤销后，需要在 Windows 浏览器重新登录、重新通过 Cookie-Editor 导出，并覆盖 `DOUYIN_COOKIE` Secret。
+### 找不到好友或匹配错误
 
-GitHub-hosted runner 的 IP 和浏览器环境会变化，可能触发抖音验证。正式运行优先选择 Linux self-hosted runner，并将工作流的 `runs-on` 改为：
+检查昵称是否准确，并改用更唯一的名称。首次只配置一个测试好友执行 dry-run，人工核对聊天对象；重名或子串昵称可能误匹配。
 
-```yaml
-runs-on: [self-hosted, linux, douyin-sender]
-```
+### 原生表情点击后无法确认
 
-Linux systemd 和 GitHub Actions schedule 不要同时启用，否则两个机器之间的本地防重记录不共享。
+该能力依赖抖音表情面板和页面选择器。使用非无头模式检查 `label`、`category` 和从 `0` 开始的 `fallback_index`；即使已经点击，程序也可能无法可靠确认结果。
 
-## 环境变量
+### 图片路径不存在
 
-本地通常不需要 `.env`。可选变量：
+确认文件存在、扩展名受支持，并检查相对路径是否与配置文件位置相符。图片触发发送后目前没有可靠的页面结果确认。
 
-```dotenv
-DOUYIN_STORAGE_STATE=storage-state.json
-DOUYIN_COOKIE=
-DINGTALK_WEBHOOK=
-DINGTALK_SECRET=
-TASK_CONFIG=config.json
-HEADLESS=false
-BROWSER_PATH=
-ARTIFACTS_DIR=artifacts
-TRACE=true
-```
+### 异常终止后提示任务正在运行
+
+程序用 `artifacts/run.lock` 防止同一台机器同时运行两个任务。先确认没有其他发送进程，再删除残留的 `artifacts/run.lock`。
+
+### 页面更新后无法操作
+
+抖音页面变化可能使搜索框、消息输入框、图片上传或表情面板的选择器失效。查看 `artifacts/` 中的诊断材料后，再按当前页面调整选择器。
+
+## 安全与限制
+
+- `storage-state.json`、登录中断时可能残留的 `storage-state.json.tmp`、`config.json`、自定义 `--env-file`、日志、结果、截图和 trace 都可能包含账号信息、登录凭证或聊天隐私，不要公开或长期保留。
+- 当前 `.gitignore` 不一定覆盖 `storage-state.json.tmp` 或自定义环境文件（例如 `auth.env`）；本任务不修改忽略规则，请在每次提交前运行 `git status`，确认没有误暂存敏感文件。
+- GitHub Actions 上传的失败产物同样可能包含隐私，应限制访问并及时删除。
+- 没有自动重新登录、验证码绕过、多账号、多好友并发、自动重试或跨机器防重复。
+- 好友名称不是稳定的唯一用户标识，重名和子串昵称存在误匹配风险。
+- 图片发送缺少可靠的结果确认；原生表情属于实验性能力。
+- 抖音页面变化可能随时使选择器失效。
+- 仓库目前没有 `LICENSE` 文件，本 README 不授予或声明许可证。
 
 ## 测试
 
-```bash
-python -m pip install -r requirements-dev.txt
-python -m pytest -q
+安装开发依赖后运行单元测试。
+
+Windows：
+
+```powershell
+.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
+.venv\Scripts\python.exe -m pytest -q
 ```
 
-自动化测试不连接真实抖音。页面选择器、好友名称和原生表情仍必须用测试好友执行 `--dry-run` 和单好友真实发送验收。
+Linux：
 
-## 安全
+```bash
+.venv/bin/python -m pip install -r requirements-dev.txt
+.venv/bin/python -m pytest -q
+```
 
-- `storage-state.json` 和 Cookie-Editor 导出的 Cookie 等同登录凭证，不要提交或发送给别人。
-- `.env`、`config.json`、`storage-state.json` 已加入 `.gitignore`。
-- 截图和 trace 可能包含聊天内容，失败产物应短期保存。
-- 出现验证码或安全验证时程序停止，不尝试绕过平台风控。
+单元测试不会访问真实抖音，也不能证明真实页面上的好友定位和消息发送长期稳定。真实使用前仍需对一个测试好友执行 dry-run 和人工确认的单好友发送测试。
+
+## 项目结构
+
+```text
+app/                  核心配置、浏览器操作和发送逻辑
+config/               高级任务配置示例
+scripts/              登录及 Windows、Linux 运行脚本
+deploy/systemd/       Linux systemd 配置
+tests/                单元测试
+.github/workflows/     GitHub Actions 工作流
+```
