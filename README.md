@@ -7,7 +7,7 @@
 ## 1. Fork 并启用 Actions
 
 先 Fork 本仓库，然后进入自己 Fork 后的仓库：
-![alt text](image/image.png)
+![image.webp](https://img.908988.xyz/file/教程/douyin-auto-fire/DKPd0GVi.webp)
 
 `Actions` → 启用工作流。
 
@@ -15,10 +15,10 @@
 
 1. 在电脑浏览器登录抖音网页版，并确认私信页面可以正常打开。
 2. 使用 Cookie-Editor 等工具导出当前站点 Cookie。
-  ![alt text](image/image-0.png)
+  ![image.webp](https://img.908988.xyz/file/教程/douyin-auto-fire/STZqIxDn.webp)
 3. 导出格式选择 **JSON**，复制完整的 JSON 数组。
-![alt text](image/image-1.png)
-![alt text](image/image-2.png)
+![image.webp](https://img.908988.xyz/file/教程/douyin-auto-fire/1rilVYmK.webp)
+![image.webp](https://img.908988.xyz/file/教程/douyin-auto-fire/QKQHfndn.webp)
 格式类似：
 
 ```json
@@ -40,8 +40,8 @@
 
 `Settings` → `Secrets and variables` → `Actions` → `New repository secret`
 
-![alt text](image/image-3.png)
-![alt text](image/image-4.png)
+![image.webp](https://img.908988.xyz/file/教程/douyin-auto-fire/aiPBHuxJ.webp)
+![image.webp](https://img.908988.xyz/file/教程/douyin-auto-fire/BKtXckyQ.webp)
 
 需要添加：
 
@@ -97,7 +97,6 @@
 进入：
 
 `Actions` → `Send Douyin Messages` → `Run workflow`
-![alt text](image/image-5.png)
 
 第一次把：
 
@@ -106,7 +105,7 @@ dry_run = true
 ```
 
 再运行工作流。
-![alt text](image/image-6.png)
+![image.webp](https://img.908988.xyz/file/教程/douyin-auto-fire/NLFF8g94.webp)
 
 Dry Run 会检查登录状态和好友定位，**不会发送消息**。
 
