@@ -7,7 +7,7 @@ import hmac
 import json
 import os
 import time
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from urllib.request import Request, urlopen
@@ -17,6 +17,7 @@ from app.models import TargetResult
 
 MAX_RESULTS_PER_SECTION = 15
 MAX_MARKDOWN_BYTES = 18_000
+NOTIFY_TIMEZONE = timezone(timedelta(hours=8), name="Asia/Shanghai")
 
 
 async def send_dingtalk_notification(
@@ -47,7 +48,7 @@ def build_dingtalk_markdown(
     failures = [result for result in results if result.status == "failed"]
     status = "全部成功" if not failures else "存在失败"
     mode = "检查模式（未发送消息）" if dry_run else "正式发送"
-    finished = (finished_at or datetime.now().astimezone()).strftime("%Y-%m-%d %H:%M:%S %z")
+    finished = (finished_at or datetime.now(timezone.utc)).astimezone(NOTIFY_TIMEZONE).strftime("%Y-%m-%d %H:%M:%S %z")
     title = f"抖音自动发送：{status}"
     lines = [
         f"### {title}",
