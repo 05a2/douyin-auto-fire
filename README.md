@@ -15,7 +15,7 @@
 
 1. 在电脑浏览器登录抖音网页版，并确认私信页面可以正常打开。
 2. 使用 Cookie-Editor 等工具导出当前站点 Cookie。
-3. [Cookie-Editor工具地址]([https://www.runoob.com](https://chromewebstore.google.com/detail/hlkenndednhfkekhgcdicdfddnkalmdm?utm_source=item-share-cb))
+3. [Cookie-Editor工具地址](https://chromewebstore.google.com/detail/hlkenndednhfkekhgcdicdfddnkalmdm?utm_source=item-share-cb)
   ![image.webp](https://img.908988.xyz/file/教程/douyin-auto-fire/STZqIxDn.webp)
 4. 导出格式选择 **JSON**，复制完整的 JSON 数组。
 ![image.webp](https://img.908988.xyz/file/教程/douyin-auto-fire/1rilVYmK.webp)
