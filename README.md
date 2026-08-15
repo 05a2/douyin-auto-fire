@@ -187,6 +187,12 @@ GitHub Actions 不会自动扫码登录，也不会绕过验证码或安全验�
 - 同一个账号不要同时运行多个定时器，避免重复发送。
 - GitHub-hosted runner 的网络环境变化可能触发抖音安全验证。
 
+
+## 友情链接
+
+- [LINUX DO](https://linux.do/) - 新的理想型社区
+
+
 ## License
 
 本项目采用 [MIT License](LICENSE)。
