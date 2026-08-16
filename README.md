@@ -1,8 +1,45 @@
-# 抖音自动续火花 - GitHub Actions 教程
+# 🔥 抖音自动续火花
 
-使用 GitHub Actions 定时运行本项目，不需要服务器长期在线。
+> 定时自动向抖音好友发送消息，保持火花不断。基于 Playwright 模拟真实浏览器操作，配合 GitHub Actions 定时运行，**无需服务器长期在线**。
+>
+![douyin-auto-fire-banner.svg](https://img.908988.xyz/file/教程/douyin-auto-fire/5pdab8It.svg)
+
+## 已实现功能
+
+- ⏰ **定时自动发送**：通过 GitHub Actions 定时触发，支持自定义 cron 表达式和时区
+- 💬 **多种消息类型**：支持发送文字、图片（PNG/JPG/GIF/WebP）、抖音原生表情
+- 🎲 **随机消息**：消息支持配置 `random` 类型，每次从候选中随机选择一条
+- 👥 **多好友支持**：可为多个好友配置各自的消息内容
+- 🧪 **Dry Run 模式**：只验证登录状态和好友定位，不真实发送，安全上线
+- 🔒 **防重复发送**：按任务+日期+好友+消息记录发送历史，避免重复触发导致刷屏
+- 🔔 **钉钉通知**：发送结果通过钉钉机器人推送，含成功/失败名单和失败截图
+- 🛡️ **失败诊断**：失败时自动保存日志、页面截图和 Playwright trace，便于排查
+- 👤 **登录凭证灵活**：支持 Cookie 或浏览器存储状态（Storage State），可选无头模式
+- ⏱️ **模拟真人操作**：随机发送间隔、输入与发送节奏
 
 > `DOUYIN_COOKIE` 是登录凭证，请只保存在 GitHub Secrets 中，不要提交到仓库或公开分享。
+
+## 技术栈与依赖
+
+| 类别 | 内容 |
+| --- | --- |
+| 语言 | Python 3.11+ |
+| 浏览器自动化 | [Playwright](https://playwright.dev/python/)（Chromium，无头模式） |
+| 定时调度 | GitHub Actions `schedule`（支持自定义 cron 与时区） |
+| 环境变量 | python-dotenv（.env 文件支持） |
+| 时区解析 | tzdata（Asia/Shanghai 等） |
+| 通知 | 钉钉机器人 Webhook（HMAC-SHA256 签名） |
+| 平台 | Windows / macOS / Linux 均可运行，CI 使用 ubuntu-latest |
+
+主要依赖（`requirements.txt`）：
+
+```text
+playwright>=1.54,<2
+python-dotenv>=1.1,<2
+tzdata>=2025.2
+```
+
+## 使用教程
 
 ## 1. Fork 并启用 Actions
 
