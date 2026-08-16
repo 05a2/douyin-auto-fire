@@ -11,6 +11,41 @@ from app.models import Message, Sticker
 from app.selectors import IMAGE_INPUTS, STICKER_BUTTONS, STICKER_PANELS
 
 
+SEND_BUTTONS = (
+    '[class*="messageMsgInputpublishBtn"]',
+    '.e2e-send-msg-bt',
+    'button[aria-label*="发送"]',
+    '[role="button"][aria-label*="发送"]',
+)
+
+
+async def _trigger_send(page: Page) -> None:
+    button = None
+    for selector in SEND_BUTTONS:
+        candidate = page.locator(selector).first
+        try:
+            if await candidate.count() and await candidate.is_visible():
+                button = candidate
+                break
+        except Exception:
+            continue
+    if button is not None:
+        await button.click()
+    else:
+        await page.keyboard.press("Enter")
+
+
+async def _publish_ready(page: Page) -> bool:
+    for selector in SEND_BUTTONS:
+        candidate = page.locator(selector).first
+        try:
+            if await candidate.count() and await candidate.is_visible():
+                return True
+        except Exception:
+            continue
+    return False
+
+
 LATEST_OUTGOING_MESSAGE = (
     '.messageMessageListlist [data-index="0"] '
     '.messageMessageBoxmessageBox:has(.messageMessageBoxcontentBox.messageMessageBoxisFromMe)'
@@ -49,25 +84,47 @@ async def send_message(page: Page, chat: DouyinChat, message: Message, stickers:
 async def send_text(chat: DouyinChat, content: str) -> None:
     editor = await chat.message_input()
     page = editor.page
-    messages = page.locator('[data-e2e="msg-item-content"]')
-    before = await messages.count()
     await editor.click()
     await page.keyboard.insert_text(content)
-    await page.keyboard.press("Enter")
     try:
         await page.wait_for_function(
-            """([selector, count, text]) => {
-                const items = [...document.querySelectorAll(selector)];
-                return items.length > count && items.some(item => item.textContent.includes(text));
+            """([txt]) => {
+                const es = [...document.querySelectorAll('[class*=messageEditor] [contenteditable=true], .messageEditorinputArea')];
+                return es.some(e => (e.innerText || '').includes(txt));
             }""",
-            arg=['[data-e2e="msg-item-content"]', before, content],
-            timeout=10_000,
+            arg=[content],
+            timeout=5_000,
         )
     except Exception as exc:
-        raise PageOperationError("文字消息已触发发送，但无法确认是否发送成功；为避免重复不会自动重试") from exc
+        raise PageOperationError("文字未能写入聊天输入框") from exc
+    await page.wait_for_timeout(300)
+    try:
+        await _trigger_send(page)
+        await _wait_for_composer_clear(page)
+    except Exception:
+        if await _publish_ready(page):
+            await _trigger_send(page)
+            await _wait_for_composer_clear(page)
+        else:
+            raise
+
+
+async def _wait_for_composer_clear(page: Page, timeout_ms: int = 10_000) -> None:
+    try:
+        await page.wait_for_function(
+            """() => {
+                const es = [...document.querySelectorAll('[class*=messageEditor] [contenteditable=true], .messageEditorinputArea')];
+                return es.every(e => (e.innerText || '').replace(/[\\s\\u200B\\u200C\\u200D\\uFEFF]+/g, '') === '');
+            }""",
+            timeout=timeout_ms,
+        )
+    except Exception as exc:
+        raise PageOperationError("已点击发送，但无法确认文字是否发送成功；为避免重复不会自动重试") from exc
 
 
 async def send_image(page: Page, image_path: str) -> None:
+    message_items = page.locator('[data-e2e="msg-item-content"]')
+    before = await message_items.count()
     file_input = None
     for selector in IMAGE_INPUTS:
         candidate = page.locator(selector).first
@@ -79,12 +136,15 @@ async def send_image(page: Page, image_path: str) -> None:
     await file_input.set_input_files(image_path)
     await page.wait_for_timeout(1_500)
 
-    send_button = page.get_by_role("button", name="发送", exact=True)
-    if await send_button.count() and await send_button.first.is_visible():
-        await send_button.first.click()
-    else:
-        await page.keyboard.press("Enter")
-    await page.wait_for_timeout(1_000)
+    await _trigger_send(page)
+    try:
+        await page.wait_for_function(
+            """([selector, count]) => document.querySelectorAll(selector).length > count""",
+            arg=['[data-e2e="msg-item-content"]', before],
+            timeout=15_000,
+        )
+    except Exception as exc:
+        raise PageOperationError("图片消息已触发发送，但无法确认是否发送成功；为避免重复不会自动重试") from exc
 
 
 async def send_douyin_sticker(page: Page, sticker: Sticker) -> None:
@@ -149,7 +209,14 @@ async def _mark_latest_outgoing_message(page: Page) -> tuple[str, str]:
 async def _click_and_confirm_sticker(page: Page, item, before: tuple[str, str], name: str) -> None:
     resource_key = await _sticker_resource_key(item)
     await item.click(force=True)
-    await _confirm_sticker_sent(page, before, name, resource_key)
+    try:
+        await _confirm_sticker_sent(page, before, name, resource_key)
+    except PageOperationError:
+        if await _publish_ready(page):
+            await _trigger_send(page)
+            await _confirm_sticker_sent(page, before, name, resource_key)
+        else:
+            raise
 
 
 async def _sticker_resource_key(item) -> str:

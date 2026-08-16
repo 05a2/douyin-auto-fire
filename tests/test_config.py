@@ -99,3 +99,54 @@ def test_loads_simple_config(tmp_path: Path) -> None:
 
     assert len(task.targets) == 2
     assert task.targets[1].messages[0].content == "你好"
+
+
+def test_loads_target_open_retries_and_timeout(tmp_path: Path) -> None:
+    path = write_config(
+        tmp_path,
+        {
+            "targets": [{"name": "好友A", "messages": [{"type": "text", "content": "你好"}]}],
+            "target_open_retries": 3,
+            "target_open_timeout_seconds": 20,
+        },
+    )
+
+    task = load_task(settings_for(path))
+
+    assert task.target_open_retries == 3
+    assert task.target_open_timeout_seconds == 20
+
+
+def test_defaults_target_open_retries_and_timeout(tmp_path: Path) -> None:
+    path = write_config(tmp_path, {"targets": [{"name": "好友A", "messages": [{"type": "text", "content": "你好"}]}]})
+
+    task = load_task(settings_for(path))
+
+    assert task.target_open_retries == 1
+    assert task.target_open_timeout_seconds == 15.0
+
+
+def test_rejects_negative_target_open_retries(tmp_path: Path) -> None:
+    path = write_config(
+        tmp_path,
+        {
+            "targets": [{"name": "好友A", "messages": [{"type": "text", "content": "你好"}]}],
+            "target_open_retries": -1,
+        },
+    )
+
+    with pytest.raises(ConfigError, match="target_open_retries"):
+        load_task(settings_for(path))
+
+
+def test_rejects_non_positive_target_open_timeout(tmp_path: Path) -> None:
+    path = write_config(
+        tmp_path,
+        {
+            "targets": [{"name": "好友A", "messages": [{"type": "text", "content": "你好"}]}],
+            "target_open_timeout_seconds": 0,
+        },
+    )
+
+    with pytest.raises(ConfigError, match="target_open_timeout_seconds"):
+        load_task(settings_for(path))

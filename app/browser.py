@@ -81,6 +81,7 @@ async def open_private_messages(page: Page, timeout_ms: int = 15_000) -> None:
         raise AuthenticationError("进入抖音私信页面后登录状态失效")
     if not await _any_visible(page, ('input[placeholder*="搜索"]', '[role="textbox"][placeholder*="搜索"]'), timeout_ms):
         raise AuthenticationError("已进入抖音私信页面，但没有检测到好友搜索框")
+    await page.wait_for_timeout(3_000)
 
 
 async def save_trace(session: BrowserSession, path: Path) -> None:

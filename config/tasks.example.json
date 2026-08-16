@@ -38,5 +38,7 @@
     "min": 3,
     "max": 8
   },
-  "continue_on_error": true
+  "continue_on_error": true,
+  "target_open_retries": 1,
+  "target_open_timeout_seconds": 15
 }

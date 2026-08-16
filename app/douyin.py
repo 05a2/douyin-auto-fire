@@ -1,20 +1,45 @@
 from __future__ import annotations
 
+import asyncio
+
 from playwright.async_api import Locator, Page
 
-from app.selectors import MESSAGE_INPUTS, SEARCH_INPUTS
+from app.selectors import CHAT_PANEL_MARKERS, MESSAGE_INPUTS, SEARCH_INPUTS
 
 
 class PageOperationError(RuntimeError):
     pass
 
 
+RETRY_DELAY_MS = 3_000
+
+
 class DouyinChat:
-    def __init__(self, page: Page, timeout_ms: int = 15_000) -> None:
+    def __init__(
+        self,
+        page: Page,
+        timeout_ms: int = 15_000,
+        confirm_timeout_ms: int = 15_000,
+    ) -> None:
         self.page = page
         self.timeout_ms = timeout_ms
+        self.confirm_timeout_ms = confirm_timeout_ms
 
-    async def open_target(self, name: str) -> None:
+    async def open_target(self, name: str, retries: int = 1) -> None:
+        last_error: Exception | None = None
+        for attempt in range(retries + 1):
+            try:
+                await self._open_target_once(name)
+                return
+            except Exception as exc:
+                last_error = exc
+                if attempt < retries:
+                    await self.page.wait_for_timeout(RETRY_DELAY_MS)
+        if last_error is not None:
+            raise last_error
+        raise PageOperationError(f"打开聊天失败: {name}")
+
+    async def _open_target_once(self, name: str) -> None:
         search = await first_visible(self.page, SEARCH_INPUTS, self.timeout_ms)
         await search.click()
         await search.fill("")
@@ -27,8 +52,7 @@ class DouyinChat:
             # exposing cookies or storage state.
             visible_text = (await self.page.locator("body").inner_text())[:500].replace("\n", " ")
             raise PageOperationError(f"搜索不到好友: {name}；当前页面文字: {visible_text}")
-        await result.evaluate("el => el.click()")
-        await self.page.wait_for_timeout(1_500)
+        await result.click(force=True)
         await self._confirm_opened(name)
 
     async def _search_result(self, name: str) -> Locator | None:
@@ -96,29 +120,56 @@ class DouyinChat:
     async def message_input(self) -> Locator:
         return await first_visible(self.page, MESSAGE_INPUTS, self.timeout_ms)
 
-    async def _confirm_opened(self, name: str) -> None:
-        # Dry-run only needs to prove that the target conversation opened. Some
-        # accounts do not mount the composer until it receives focus or a real send.
-        markers = (
-            '[class*="RightPanelHeader"]',
-            '[class*="messageContent"]',
-            '[class*="chatContent"]',
-            '[class*="MessagePanel"]',
-        )
-        for selector in markers:
+    async def _confirm_opened(self, name: str, timeout_ms: int | None = None) -> None:
+        timeout = timeout_ms if timeout_ms is not None else self.confirm_timeout_ms
+        deadline = asyncio.get_running_loop().time() + timeout / 1000
+        while True:
+            last_error = await self._chat_open_error(name)
+            if last_error is None:
+                return
+            if asyncio.get_running_loop().time() >= deadline:
+                raise last_error
+            await self.page.wait_for_timeout(500)
+
+    async def _chat_open_error(self, name: str) -> PageOperationError | None:
+        for selector in CHAT_PANEL_MARKERS:
             locator = self.page.locator(selector).filter(has_text=name).first
             if await locator.count():
-                return
-        text = self.page.get_by_text(name, exact=True)
-        for index in range(await text.count()):
-            candidate = text.nth(index)
-            class_name = await candidate.get_attribute("class") or ""
-            if "conversationConversationItemtitle" not in class_name:
-                return
-        body_text = await self.page.locator("body").inner_text()
-        if name in body_text and "发消息" in body_text:
-            return
-        raise PageOperationError(f"点击搜索结果后无法确认聊天已打开: {name}")
+                return None
+
+        composer_visible = await self._composer_visible()
+        if composer_visible:
+            body_text = ""
+            try:
+                body_text = (await self.page.locator("body").inner_text())[:1000].replace("\n", " ")
+            except Exception:
+                body_text = ""
+            if name in body_text:
+                return None
+            text = self.page.get_by_text(name, exact=True)
+            for index in range(await text.count()):
+                candidate = text.nth(index)
+                try:
+                    if not await candidate.is_visible():
+                        continue
+                    class_name = await candidate.get_attribute("class") or ""
+                    if "conversationConversationItemtitle" not in class_name:
+                        return None
+                except Exception:
+                    continue
+        return PageOperationError(
+            f"点击搜索结果后无法确认聊天已打开: {name}（输入框: {'有' if composer_visible else '无'}）"
+        )
+
+    async def _composer_visible(self) -> bool:
+        for selector in MESSAGE_INPUTS:
+            locator = self.page.locator(selector).first
+            try:
+                if await locator.count() and await locator.is_visible():
+                    return True
+            except Exception:
+                continue
+        return False
 
 
 async def first_visible(page: Page, selectors: tuple[str, ...], timeout_ms: int = 15_000) -> Locator:

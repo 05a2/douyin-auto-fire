@@ -11,6 +11,7 @@ from app.selectors import DOUYIN_CHAT_URL
 async def test_opens_chat_directly_before_checking_login() -> None:
     page = MagicMock()
     page.goto = AsyncMock()
+    page.wait_for_timeout = AsyncMock()
 
     with patch("app.browser._any_visible", new=AsyncMock(side_effect=[False, False, True])):
         await open_private_messages(page)

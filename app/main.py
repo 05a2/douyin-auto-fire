@@ -59,12 +59,12 @@ async def run(dry_run: bool = False, env_file: str | None = None) -> int:
                 fatal_error = exc
 
             if fatal_error is None:
-                chat = DouyinChat(page)
+                chat = DouyinChat(page, timeout_ms=int(task.target_open_timeout_seconds * 1000))
                 for index, target in enumerate(task.targets):
                     sent = 0
                     try:
                         LOGGER.info("处理好友: %s", target.name)
-                        await chat.open_target(target.name)
+                        await chat.open_target(target.name, retries=task.target_open_retries)
                         if not dry_run:
                             for message_index, message in enumerate(target.messages):
                                 message_id = _message_id(message_index, message)
@@ -169,7 +169,9 @@ def _configure_logging(artifacts_dir: Path) -> None:
 
 
 async def _screenshot(page, artifacts_dir: Path, label: str) -> Path | None:
-    safe_label = re.sub(r"[^A-Za-z0-9_.-]+", "_", label).strip("_") or "failure"
+    safe_label = re.sub(r"[^A-Za-z0-9_.-]+", "_", label).strip("_")
+    suffix = hashlib.sha1(label.encode("utf-8")).hexdigest()[:6]
+    safe_label = f"{safe_label}-{suffix}" if safe_label else f"failure-{suffix}"
     directory = artifacts_dir / "screenshots"
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / f"{datetime.now():%Y%m%d-%H%M%S}-{safe_label}.png"

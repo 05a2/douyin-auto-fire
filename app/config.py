@@ -69,6 +69,14 @@ def load_task(settings: Settings) -> TaskConfig:
     legacy_stickers_path = settings.task_config_path.parent / "stickers.json"
     if not stickers and legacy_stickers_path.exists():
         stickers = _load_stickers(legacy_stickers_path)
+    target_open_retries = raw.get("target_open_retries", 1)
+    if isinstance(target_open_retries, bool) or not isinstance(target_open_retries, int) or target_open_retries < 0:
+        raise ConfigError("target_open_retries 必须是非负整数")
+    target_open_timeout_seconds = _number(
+        raw.get("target_open_timeout_seconds", 15), "target_open_timeout_seconds"
+    )
+    if target_open_timeout_seconds <= 0:
+        raise ConfigError("target_open_timeout_seconds 必须大于 0")
     task = TaskConfig(
         task_id=_non_empty_string(raw.get("task_id", "daily-streak"), "task_id"),
         timezone=_non_empty_string(raw.get("timezone", "Asia/Shanghai"), "timezone"),
@@ -78,6 +86,8 @@ def load_task(settings: Settings) -> TaskConfig:
         interval_max=interval_max,
         continue_on_error=raw.get("continue_on_error", True),
         prevent_duplicates=raw.get("prevent_duplicates", False),
+        target_open_retries=target_open_retries,
+        target_open_timeout_seconds=target_open_timeout_seconds,
     )
     if not isinstance(task.continue_on_error, bool):
         raise ConfigError("continue_on_error 必须是布尔值")

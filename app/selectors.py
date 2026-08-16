@@ -20,6 +20,14 @@ SEARCH_INPUTS = (
     'input[placeholder*="搜索"]',
     '[role="textbox"][placeholder*="搜索"]',
 )
+CHAT_PANEL_MARKERS = (
+    '[class*="RightPanelHeader"]',
+    '[class*="chatHeader"]',
+    '[class*="ChatHeader"]',
+    '[class*="messageContent"]',
+    '[class*="chatContent"]',
+    '[class*="MessagePanel"]',
+)
 MESSAGE_INPUTS = (
     '[data-contents="true"]',
     '.DraftEditor-editor [contenteditable="true"]',

@@ -4,7 +4,16 @@ import pytest
 
 from app.models import Message
 from app.douyin import PageOperationError
-from app.sender import LATEST_OUTGOING_MESSAGE, _confirm_sticker_sent, _sticker_resource_key, send_message
+from app.sender import (
+    LATEST_OUTGOING_MESSAGE,
+    SEND_BUTTONS,
+    _click_and_confirm_sticker,
+    _confirm_sticker_sent,
+    _publish_ready,
+    _sticker_resource_key,
+    _trigger_send,
+    send_message,
+)
 
 
 @pytest.mark.asyncio
@@ -13,10 +22,14 @@ async def test_random_message_delegates_to_selected_choice(monkeypatch) -> None:
     page = MagicMock()
     message_items = MagicMock()
     message_items.count = AsyncMock(return_value=0)
+    missing_first = MagicMock()
+    missing_first.count = AsyncMock(return_value=0)
+    message_items.first = missing_first
     page.locator.return_value = message_items
     page.keyboard.insert_text = AsyncMock()
     page.keyboard.press = AsyncMock()
     page.wait_for_function = AsyncMock()
+    page.wait_for_timeout = AsyncMock()
     editor.page = page
     chat = AsyncMock()
     chat.message_input.return_value = editor
@@ -28,6 +41,121 @@ async def test_random_message_delegates_to_selected_choice(monkeypatch) -> None:
 
     page.keyboard.insert_text.assert_awaited_once_with("你好")
     page.keyboard.press.assert_awaited_once_with("Enter")
+
+
+@pytest.mark.asyncio
+async def test_trigger_send_clicks_publish_button_when_visible() -> None:
+    page = MagicMock()
+    button = MagicMock()
+    button.count = AsyncMock(return_value=1)
+    button.is_visible = AsyncMock(return_value=True)
+    button.click = AsyncMock()
+    publish = MagicMock()
+    publish.first = button
+    missing_loc = MagicMock()
+    missing_first = MagicMock()
+    missing_first.count = AsyncMock(return_value=0)
+    missing_loc.first = missing_first
+    page.locator.side_effect = lambda selector: publish if selector == SEND_BUTTONS[0] else missing_loc
+
+    await _trigger_send(page)
+
+    button.click.assert_awaited_once_with()
+    page.keyboard.press.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_trigger_send_falls_back_to_enter() -> None:
+    page = MagicMock()
+    missing = MagicMock()
+    missing.first = MagicMock()
+    missing.first.count = AsyncMock(return_value=0)
+    page.locator.return_value = missing
+    page.keyboard.press = AsyncMock()
+
+    await _trigger_send(page)
+
+    page.keyboard.press.assert_awaited_once_with("Enter")
+
+
+@pytest.mark.asyncio
+async def test_publish_ready_true_when_button_visible() -> None:
+    page = MagicMock()
+    button = MagicMock()
+    button.count = AsyncMock(return_value=1)
+    button.is_visible = AsyncMock(return_value=True)
+    publish = MagicMock()
+    publish.first = button
+    missing = MagicMock()
+    missing.first = MagicMock()
+    missing.first.count = AsyncMock(return_value=0)
+    page.locator.side_effect = lambda selector: publish if selector == SEND_BUTTONS[0] else missing
+
+    assert await _publish_ready(page) is True
+
+
+@pytest.mark.asyncio
+async def test_sticker_click_retries_via_publish_when_staged(monkeypatch) -> None:
+    item = MagicMock()
+    item.get_attribute = AsyncMock(return_value=None)
+    item.click = AsyncMock()
+    img_first = MagicMock()
+    img_first.count = AsyncMock(return_value=0)
+    img_loc = MagicMock()
+    img_loc.first = img_first
+    item.locator.return_value = img_loc
+    page = MagicMock()
+    calls = {"confirm": 0, "publish": 0}
+
+    async def fake_confirm(_page, _before, _name, _key=""):
+        calls["confirm"] += 1
+        if calls["confirm"] == 1:
+            raise PageOperationError("未检测到新的已发送消息")
+        return None
+
+    async def fake_trigger(_page):
+        calls["publish"] += 1
+
+    async def fake_ready(_page):
+        return True
+
+    monkeypatch.setattr("app.sender._confirm_sticker_sent", fake_confirm)
+    monkeypatch.setattr("app.sender._trigger_send", fake_trigger)
+    monkeypatch.setattr("app.sender._publish_ready", fake_ready)
+
+    await _click_and_confirm_sticker(page, item, ("anchor", "old"), "比心")
+
+    assert calls["confirm"] == 2
+    assert calls["publish"] == 1
+
+
+@pytest.mark.asyncio
+async def test_sticker_click_raises_when_not_staged(monkeypatch) -> None:
+    item = MagicMock()
+    item.get_attribute = AsyncMock(return_value=None)
+    item.click = AsyncMock()
+    img_first = MagicMock()
+    img_first.count = AsyncMock(return_value=0)
+    img_loc = MagicMock()
+    img_loc.first = img_first
+    item.locator.return_value = img_loc
+    page = MagicMock()
+
+    async def fake_confirm(_page, _before, _name, _key=""):
+        raise PageOperationError("未检测到新的已发送消息")
+
+    async def fake_trigger(_page):
+        raise AssertionError("不应触发发送")
+
+    async def fake_ready(_page):
+        return False
+
+    monkeypatch.setattr("app.sender._confirm_sticker_sent", fake_confirm)
+    monkeypatch.setattr("app.sender._trigger_send", fake_trigger)
+    monkeypatch.setattr("app.sender._publish_ready", fake_ready)
+
+    with pytest.raises(PageOperationError):
+        await _click_and_confirm_sticker(page, item, ("anchor", "old"), "比心")
 
 
 @pytest.mark.asyncio
