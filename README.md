@@ -129,6 +129,7 @@ tzdata>=2025.2
 不同账号的表情顺序可能不同，`fallback_index` 需要按自己的抖音表情面板调整。
 
 第一次建议只配置 **1 个好友** 测试。修改好友、消息或表情时，直接更新 `DOUYIN_CONFIG` Secret 即可。
+**不会配置可以使用[config.json生成器](https://douyin-config.pages.dev/)**  网页操作起来还是很简单的
 
 ## 4. 先运行 Dry Run
 
