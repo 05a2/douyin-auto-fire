@@ -132,6 +132,8 @@ tzdata>=2025.2
 
 **不会配置可以使用[config.json生成器](https://douyin-config.pages.dev/)**  网页操作起来还是很简单的
 
+生成器的很多表情的都是货不对板  比心是可以正常使用的 文字没有问题
+
 ## 4. 先运行 Dry Run
 
 进入：
