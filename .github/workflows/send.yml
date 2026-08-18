@@ -50,7 +50,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: douyin-failure-${{ github.run_id }}
-          path: |
-            artifacts/run.log
-            artifacts/result.json
+          path: artifacts/
           retention-days: 3

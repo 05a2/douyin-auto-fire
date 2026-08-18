@@ -212,12 +212,14 @@ GitHub Actions 不会自动扫码登录，也不会绕过验证码或安全验�
 
 ## 8. 失败日志
 
-工作流失败时会上传脱敏后的诊断文件，仅包含：
+工作流失败时会上传 `artifacts/`，其中可能包含：
 
 - `run.log`
 - `result.json`
+- `screenshots/`
+- `traces/`
 
-失败 Artifact 保留 3 天。
+失败 Artifact 保留 3 天。截图和日志可能包含聊天隐私，请勿公开分享。
 
 ## 9. 隐私保护
 
@@ -235,7 +237,7 @@ GitHub Actions 不会自动扫码登录，也不会绕过验证码或安全验�
 
 钉钉私人通知仍显示真实好友名称。
 
-失败诊断 Artifact 保留 3 天，但只包含脱敏后的安全文本诊断，不上传原始聊天页面截图和 Playwright trace。
+失败诊断 Artifact 保留 3 天。
 
 ## 注意
 
