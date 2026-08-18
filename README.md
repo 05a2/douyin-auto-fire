@@ -91,6 +91,7 @@ tzdata>=2025.2
 | `DINGTALK_SECRET` | 钉钉机器人 Secret | 否 |
 
 钉钉通知不用就不要配置；需要使用时，两个钉钉 Secret 必须同时填写。
+**若有多个账号就是用下面[多账号](#10-多账号可选)的配置文件变量名称**  网页操作起来还是很简单的
 
 ### DOUYIN_CONFIG 示例
 
@@ -244,60 +245,7 @@ GitHub Actions 不会自动扫码登录，也不会绕过验证码或安全验�
 > 升级后**完全向后兼容**：没有多账号配置时自动使用旧单账号模式，
 > 现有的 `DOUYIN_COOKIE` / `DOUYIN_CONFIG` Secret 与 `python run.py` 保持不变。
 
-单仓库内可以加载多套账号配置并分别执行任务（当前为串行执行，暂不支持
-账号独立的定时，多个账号共用同一个定时）。
 
-### 本地 / 自托管使用
-
-1. 复制示例并填写每个账号的配置：
-
-   ```bash
-   cp config/accounts.example.json config/accounts.json
-   cp .env.account.example .env.account1
-   cp .env.account.example .env.account2
-   ```
-
-   `config/accounts.json`：
-
-   ```json
-   {
-     "accounts": [
-       { "id": "account1", "enabled": true, "env_file": ".env.account1" },
-       { "id": "account2", "enabled": true, "env_file": ".env.account2" }
-     ]
-   }
-   ```
-
-   `.env.account1`（每个账号独立，Cookie 不要共享）：
-
-   ```env
-   DOUYIN_COOKIE=账号1的CookieJSON
-   TASK_CONFIG=config/tasks/account1.json
-   ```
-
-   > 任务配置路径请使用 `TASK_CONFIG`，不要使用 `DOUYIN_CONFIG`——
-   > 那是 GitHub Actions 的 Secret 名称，程序不读取它。
-
-2. 每个账号的产物完全隔离（历史记录、日志、截图、trace、运行锁）：
-
-   ```text
-   artifacts/
-     account1/{history.json, run.log, result.json, screenshots/, traces/}
-     account2/{history.json, run.log, result.json, screenshots/, traces/}
-   ```
-
-   `ARTIFACTS_DIR` 不写时默认 `artifacts/<账号id>/`；`storage_state/` 目录
-   可放每个账号的登录状态文件（需要时在 env 里指定
-   `DOUYIN_STORAGE_STATE=storage_state/account1.json`）。
-
-3. 直接运行：
-
-   ```bash
-   python run.py
-   ```
-
-   程序自动检测 `config/accounts.json`：存在则多账号串行执行，不存在则
-   进入旧单账号模式。日志与错误均带 `[账号id]` 前缀。
 
 ### GitHub Actions 使用
 
