@@ -239,6 +239,101 @@ GitHub Actions 不会自动扫码登录，也不会绕过验证码或安全验�
 
 失败诊断 Artifact 保留 3 天。
 
+## 10. 多账号（可选）
+
+> 升级后**完全向后兼容**：没有多账号配置时自动使用旧单账号模式，
+> 现有的 `DOUYIN_COOKIE` / `DOUYIN_CONFIG` Secret 与 `python run.py` 保持不变。
+
+单仓库内可以加载多套账号配置并分别执行任务（当前为串行执行，暂不支持
+账号独立的定时，多个账号共用同一个定时）。
+
+### 本地 / 自托管使用
+
+1. 复制示例并填写每个账号的配置：
+
+   ```bash
+   cp config/accounts.example.json config/accounts.json
+   cp .env.account.example .env.account1
+   cp .env.account.example .env.account2
+   ```
+
+   `config/accounts.json`：
+
+   ```json
+   {
+     "accounts": [
+       { "id": "account1", "enabled": true, "env_file": ".env.account1" },
+       { "id": "account2", "enabled": true, "env_file": ".env.account2" }
+     ]
+   }
+   ```
+
+   `.env.account1`（每个账号独立，Cookie 不要共享）：
+
+   ```env
+   DOUYIN_COOKIE=账号1的CookieJSON
+   TASK_CONFIG=config/tasks/account1.json
+   ```
+
+   > 任务配置路径请使用 `TASK_CONFIG`，不要使用 `DOUYIN_CONFIG`——
+   > 那是 GitHub Actions 的 Secret 名称，程序不读取它。
+
+2. 每个账号的产物完全隔离（历史记录、日志、截图、trace、运行锁）：
+
+   ```text
+   artifacts/
+     account1/{history.json, run.log, result.json, screenshots/, traces/}
+     account2/{history.json, run.log, result.json, screenshots/, traces/}
+   ```
+
+   `ARTIFACTS_DIR` 不写时默认 `artifacts/<账号id>/`；`storage_state/` 目录
+   可放每个账号的登录状态文件（需要时在 env 里指定
+   `DOUYIN_STORAGE_STATE=storage_state/account1.json`）。
+
+3. 直接运行：
+
+   ```bash
+   python run.py
+   ```
+
+   程序自动检测 `config/accounts.json`：存在则多账号串行执行，不存在则
+   进入旧单账号模式。日志与错误均带 `[账号id]` 前缀。
+
+### GitHub Actions 使用
+
+无需修改 workflow。在仓库设置中按账号添加 Secret（可选，旧用户不配置
+即保持单账号模式）。每个账号两个 Secret，内容与旧的 `DOUYIN_COOKIE` /
+`DOUYIN_CONFIG` 完全一致：
+
+| Secret | 内容 |
+| --- | --- |
+| `DOUYIN_COOKIE_ACCOUNT1` | 账号1 的 Cookie JSON 数组 |
+| `DOUYIN_CONFIG_ACCOUNT1` | 账号1 的完整发送配置 JSON |
+| `DOUYIN_COOKIE_ACCOUNT2` | 账号2 的 Cookie JSON 数组 |
+| `DOUYIN_CONFIG_ACCOUNT2` | 账号2 的完整发送配置 JSON |
+| `DOUYIN_COOKIE_ACCOUNT3` ~ `ACCOUNT5` | 以此类推，当前最多 5 个账号 |
+
+workflow 会自动为每个配齐了 Cookie 与 Config 的账号生成
+`config/accounts.json` 与对应的 `.env.accountN`，无需手动维护这些文件。
+要求：
+
+- 账号从 `ACCOUNT1` 开始连续编号，允许跳过（例如只配置 ACCOUNT1 和 ACCOUNT3）。
+- 某个账号只配置了 Cookie 或 Config 其中一个，workflow 会直接报错提示，
+  防止账号被静默漏跑。
+- 旧的 `DOUYIN_COOKIE` / `DOUYIN_CONFIG` Secret 无需删除；检测到多账号
+  配置时自动使用多账号模式。
+- **老用户追加账号**：没有配置 `DOUYIN_COOKIE_ACCOUNT1` / `DOUYIN_CONFIG_ACCOUNT1`
+  时，旧的 `DOUYIN_COOKIE` / `DOUYIN_CONFIG` 会自动作为账号1，因此老用户
+  只需要直接添加 `ACCOUNT2`（及以上）的 Secret 即可。
+  建议之后有空把旧配置复制成 `ACCOUNT1` 对，避免将来删除旧 Secret 时账号1
+  从清单中消失。
+
+### 失败隔离与退出码
+
+- 某个账号失败（Cookie 失效、好友不存在、发送异常等）**不影响其他账号**，串行继续执行。
+- 全部账号成功 → 退出码 `0`；存在任意失败 → 退出码 `1`（与单账号语义一致）。
+- 每个账号的钉钉通知使用各自 env 中的 `DINGTALK_WEBHOOK` / `DINGTALK_SECRET`。
+
 ## 注意
 
 - Cookie 和配置不要直接提交到仓库。

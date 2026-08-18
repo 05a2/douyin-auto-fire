@@ -144,10 +144,7 @@ async def run(dry_run: bool = False, env_file: str | None = None) -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="向多个抖音好友发送配置的消息")
-    parser.add_argument("--dry-run", action="store_true", help="只验证登录和好友，不发送消息")
-    parser.add_argument("--env-file", help="指定 .env 文件路径")
-    args = parser.parse_args()
+    args = _parse_cli_args()
     try:
         settings = load_settings(args.env_file)
         with run_lock(settings.artifacts_dir / "run.lock"):
@@ -160,17 +157,42 @@ def main() -> int:
         return 130
 
 
-def _configure_logging(artifacts_dir: Path, aliases: dict[str, str] | None = None) -> None:
-    if LOGGER.handlers:
+def _parse_cli_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="向多个抖音好友发送配置的消息")
+    parser.add_argument("--dry-run", action="store_true", help="只验证登录和好友，不发送消息")
+    parser.add_argument("--env-file", help="指定 .env 文件路径")
+    return parser.parse_args()
+
+
+def _configure_logging(
+    artifacts_dir: Path,
+    aliases: dict[str, str] | None = None,
+    *,
+    label: str | None = None,
+    reset: bool = False,
+) -> None:
+    if reset or not LOGGER.handlers:
+        for handler in list(LOGGER.handlers):
+            LOGGER.removeHandler(handler)
+            if isinstance(handler, logging.FileHandler):
+                handler.close()
+        LOGGER.setLevel(logging.INFO)
+        pattern = "%(asctime)s %(levelname)s %(message)s"
+        if label:
+            pattern = pattern.replace(" %(message)s", f" [{label}] %(message)s")
+        formatter = RedactingFormatter(pattern, aliases=aliases)
+        artifacts_dir.mkdir(parents=True, exist_ok=True)
+        file_handler = logging.FileHandler(artifacts_dir / "run.log", encoding="utf-8")
+        file_handler.setFormatter(formatter)
+        stream_handler = logging.StreamHandler()
+        stream_handler.setFormatter(formatter)
+        LOGGER.addHandler(file_handler)
+        LOGGER.addHandler(stream_handler)
         return
-    LOGGER.setLevel(logging.INFO)
-    formatter = RedactingFormatter("%(asctime)s %(levelname)s %(message)s", aliases=aliases)
-    file_handler = logging.FileHandler(artifacts_dir / "run.log", encoding="utf-8")
-    file_handler.setFormatter(formatter)
-    stream_handler = logging.StreamHandler()
-    stream_handler.setFormatter(formatter)
-    LOGGER.addHandler(file_handler)
-    LOGGER.addHandler(stream_handler)
+    # 已有 handler（多账号模式下 run() 内部会再次调用）：只更新脱敏别名。
+    for handler in LOGGER.handlers:
+        if isinstance(handler.formatter, RedactingFormatter):
+            handler.formatter.aliases = dict(aliases or {})
 
 
 async def _screenshot(page, artifacts_dir: Path, label: str) -> Path | None:
