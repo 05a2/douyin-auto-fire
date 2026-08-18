@@ -82,9 +82,20 @@ jobs:
                       f"账号 account{index} 的 DOUYIN_COOKIE_ACCOUNT{index} 与 "
                       f"DOUYIN_CONFIG_ACCOUNT{index} 必须同时配置"
                   )
+              # 提前校验，出错时直接指出是哪个 Secret，避免任务执行时才报错
+              try:
+                  json.loads(cookie)
+              except json.JSONDecodeError as exc:
+                  raise SystemExit(f"DOUYIN_COOKIE_ACCOUNT{index} 不是有效 JSON: {exc}") from exc
+              try:
+                  json.loads(config)
+              except json.JSONDecodeError as exc:
+                  raise SystemExit(f"DOUYIN_CONFIG_ACCOUNT{index} 不是有效 JSON: {exc}") from exc
               env_file = f".env.account{index}"
+              # Cookie 用 JSON 字符串转义后写入，dotenv 可精确还原，
+              # 兼容多行 Cookie JSON 与 # 等特殊字符
               Path(env_file).write_text(
-                  f"DOUYIN_COOKIE={cookie}\nTASK_CONFIG=config/tasks/account{index}.json\n",
+                  f"DOUYIN_COOKIE={json.dumps(cookie)}\nTASK_CONFIG=config/tasks/account{index}.json\n",
                   encoding="utf-8",
               )
               Path(f"config/tasks/account{index}.json").write_text(config, encoding="utf-8")
