@@ -17,6 +17,7 @@ from app.douyin import DouyinChat
 from app.history import AlreadyRunningError, History, run_lock
 from app.models import Settings, TargetResult
 from app.notifier import send_dingtalk_notification
+from app.privacy import RedactingFormatter, build_target_aliases, redact_text, target_alias
 from app.sender import send_message
 
 
@@ -27,7 +28,8 @@ async def run(dry_run: bool = False, env_file: str | None = None) -> int:
     settings = load_settings(env_file)
     task = load_task(settings)
     settings.artifacts_dir.mkdir(parents=True, exist_ok=True)
-    _configure_logging(settings.artifacts_dir)
+    aliases = build_target_aliases(task.targets)
+    _configure_logging(settings.artifacts_dir, aliases)
 
     if not settings.storage_state and not settings.cookie:
         raise ConfigError("必须配置 DOUYIN_STORAGE_STATE 或 DOUYIN_COOKIE")
@@ -62,8 +64,9 @@ async def run(dry_run: bool = False, env_file: str | None = None) -> int:
                 chat = DouyinChat(page, timeout_ms=int(task.target_open_timeout_seconds * 1000))
                 for index, target in enumerate(task.targets):
                     sent = 0
+                    alias = target_alias(index)
                     try:
-                        LOGGER.info("处理好友: %s", target.name)
+                        LOGGER.info("处理好友: %s", alias)
                         await chat.open_target(target.name, retries=task.target_open_retries)
                         if not dry_run:
                             for message_index, message in enumerate(target.messages):
@@ -72,7 +75,7 @@ async def run(dry_run: bool = False, env_file: str | None = None) -> int:
                                 if task.prevent_duplicates and history.contains(key):
                                     LOGGER.info(
                                         "跳过当天已处理或结果不确定的消息: %s #%d",
-                                        target.name,
+                                        alias,
                                         message_index + 1,
                                     )
                                     continue
@@ -85,10 +88,10 @@ async def run(dry_run: bool = False, env_file: str | None = None) -> int:
                                 sent += 1
                                 if message_index < len(target.messages) - 1:
                                     await asyncio.sleep(random.uniform(task.interval_min, task.interval_max))
-                        results.append(TargetResult(target=target.name, status="success", sent=sent))
+                        results.append(TargetResult(target=target.name, status="success", sent=sent, target_alias=alias))
                     except (AuthenticationError, RiskControlError) as exc:
-                        LOGGER.exception("处理好友时登录状态失效: %s", target.name)
-                        screenshot = await _screenshot(page, settings.artifacts_dir, f"{index + 1}-{target.name}")
+                        LOGGER.exception("处理好友时登录状态失效: %s", alias)
+                        screenshot = await _screenshot(page, settings.artifacts_dir, alias)
                         if screenshot:
                             screenshots.append(screenshot)
                         if settings.trace and not trace_saved:
@@ -97,12 +100,12 @@ async def run(dry_run: bool = False, env_file: str | None = None) -> int:
                                 trace_saved = True
                             except Exception:
                                 LOGGER.exception("保存 trace 失败")
-                        results.append(TargetResult(target=target.name, status="failed", sent=sent, error=str(exc)))
+                        results.append(TargetResult(target=target.name, status="failed", sent=sent, error=str(exc), target_alias=alias))
                         fatal_error = exc
                         break
                     except Exception as exc:
-                        LOGGER.exception("好友处理失败: %s", target.name)
-                        screenshot = await _screenshot(page, settings.artifacts_dir, f"{index + 1}-{target.name}")
+                        LOGGER.exception("好友处理失败: %s", alias)
+                        screenshot = await _screenshot(page, settings.artifacts_dir, alias)
                         if screenshot:
                             screenshots.append(screenshot)
                         if settings.trace and not trace_saved:
@@ -111,7 +114,7 @@ async def run(dry_run: bool = False, env_file: str | None = None) -> int:
                                 trace_saved = True
                             except Exception:
                                 LOGGER.exception("保存 trace 失败")
-                        results.append(TargetResult(target=target.name, status="failed", sent=sent, error=str(exc)))
+                        results.append(TargetResult(target=target.name, status="failed", sent=sent, error=str(exc), target_alias=alias))
                         if not task.continue_on_error:
                             break
                     if index < len(task.targets) - 1 and not dry_run:
@@ -130,7 +133,7 @@ async def run(dry_run: bool = False, env_file: str | None = None) -> int:
             fatal_error = exc
             results.append(TargetResult(target="运行检查", status="failed", error=str(exc)))
 
-    _write_results(settings.artifacts_dir, task.task_id, dry_run, results)
+    _write_results(settings.artifacts_dir, task.task_id, dry_run, results, aliases)
     await _notify_dingtalk(settings, task.task_id, dry_run, results, screenshots)
     succeeded = sum(result.status == "success" for result in results)
     failed = sum(result.status == "failed" for result in results)
@@ -157,11 +160,11 @@ def main() -> int:
         return 130
 
 
-def _configure_logging(artifacts_dir: Path) -> None:
+def _configure_logging(artifacts_dir: Path, aliases: dict[str, str] | None = None) -> None:
     if LOGGER.handlers:
         return
     LOGGER.setLevel(logging.INFO)
-    formatter = logging.Formatter("%(asctime)s %(levelname)s %(message)s")
+    formatter = RedactingFormatter("%(asctime)s %(levelname)s %(message)s", aliases=aliases)
     file_handler = logging.FileHandler(artifacts_dir / "run.log", encoding="utf-8")
     file_handler.setFormatter(formatter)
     stream_handler = logging.StreamHandler()
@@ -171,7 +174,7 @@ def _configure_logging(artifacts_dir: Path) -> None:
 
 
 async def _screenshot(page, artifacts_dir: Path, label: str) -> Path | None:
-    safe_label = re.sub(r"[^A-Za-z0-9_.-]+", "_", label).strip("_")
+    safe_label = re.sub(r"[^A-Za-z0-9_.\-一-鿿]+", "_", label).strip("_")
     suffix = hashlib.sha1(label.encode("utf-8")).hexdigest()[:6]
     safe_label = f"{safe_label}-{suffix}" if safe_label else f"failure-{suffix}"
     directory = artifacts_dir / "screenshots"
@@ -185,14 +188,31 @@ async def _screenshot(page, artifacts_dir: Path, label: str) -> Path | None:
         return None
 
 
-def _write_results(artifacts_dir: Path, task_id: str, dry_run: bool, results: list[TargetResult]) -> None:
+def _write_results(
+    artifacts_dir: Path,
+    task_id: str,
+    dry_run: bool,
+    results: list[TargetResult],
+    aliases: dict[str, str] | None = None,
+) -> None:
     payload = {
         "task_id": task_id,
         "dry_run": dry_run,
         "finished_at": datetime.now().astimezone().isoformat(),
-        "results": [asdict(result) for result in results],
+        "results": [_redacted_result(result, aliases) for result in results],
     }
     (artifacts_dir / "result.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _redacted_result(result: TargetResult, aliases: dict[str, str] | None = None) -> dict:
+    aliases = dict(aliases or {})
+    aliases[result.target] = result.target_alias or aliases.get(result.target, result.target)
+    return {
+        "target": aliases[result.target],
+        "status": result.status,
+        "sent": result.sent,
+        "error": redact_text(result.error, aliases) if result.error else None,
+    }
 
 
 async def _notify_dingtalk(
