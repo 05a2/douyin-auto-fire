@@ -298,3 +298,6 @@ workflow 会自动为每个配齐了 Cookie 与 Config 的账号生成
 ## License
 
 本项目采用 [MIT License](LICENSE)。
+
+[![GitHub stars](https://img.shields.io/github/stars/unmev/douyin-auto-fire?style=flat-square)](https://github.com/unmev/douyin-auto-fire/stargazers)
+![Visitors](https://visitor-badge.laobi.icu/badge?page_id=unmev.douyin-auto-fire)
