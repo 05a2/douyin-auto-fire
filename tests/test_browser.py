@@ -6,6 +6,7 @@ import pytest
 from app.browser import (
     AuthenticationError,
     RiskControlError,
+    SearchBoxNotReadyError,
     _collect_safe_diagnostic,
     _normalize_cookies,
     _safe_url,
@@ -21,8 +22,9 @@ async def test_opens_chat_directly_before_checking_login() -> None:
     page.goto = AsyncMock()
     page.wait_for_timeout = AsyncMock()
 
-    with patch("app.browser._any_visible", new=AsyncMock(side_effect=[False, False, True])):
-        await open_private_messages(page)
+    with patch("app.browser._any_visible", new=AsyncMock(side_effect=[False, False])):
+        with patch("app.browser._first_visible_selector", new=AsyncMock(return_value='input[placeholder*="搜索"]')):
+            await open_private_messages(page)
 
     page.goto.assert_awaited_once_with(DOUYIN_CHAT_URL, wait_until="domcontentloaded", timeout=45_000)
 
@@ -81,6 +83,7 @@ async def test_safe_diagnostic_excludes_content_and_nicknames() -> None:
 async def test_open_private_messages_logs_diagnostic_when_search_missing(caplog) -> None:
     page = MagicMock()
     page.goto = AsyncMock()
+    page.reload = AsyncMock()
     page.wait_for_timeout = AsyncMock()
     page.url = "https://www.douyin.com/chat"
     page.title = AsyncMock(return_value="抖音私信")
@@ -94,11 +97,12 @@ async def test_open_private_messages_logs_diagnostic_when_search_missing(caplog)
     )
 
     with patch("app.browser._any_visible", new=AsyncMock(return_value=False)):
-        with caplog.at_level(logging.ERROR, logger="douyin_sender"):
-            with pytest.raises(AuthenticationError, match="没有检测到好友搜索框"):
-                await open_private_messages(page)
+        with patch("app.browser._first_visible_selector", new=AsyncMock(return_value=None)):
+            with caplog.at_level(logging.ERROR, logger="douyin_sender"):
+                with pytest.raises(SearchBoxNotReadyError, match="重试后仍未就绪"):
+                    await open_private_messages(page)
 
-    assert "未检测到好友搜索框，页面安全诊断" in caplog.text
+    assert "多次重试后仍未检测到好友搜索框，页面安全诊断" in caplog.text
     assert "role_textbox_count=0" in caplog.text
 
 
@@ -108,12 +112,49 @@ async def test_search_hit_emits_no_diagnostic(caplog) -> None:
     page.goto = AsyncMock()
     page.wait_for_timeout = AsyncMock()
 
-    with patch("app.browser._any_visible", new=AsyncMock(side_effect=[False, False, True])):
-        with caplog.at_level(logging.ERROR, logger="douyin_sender"):
-            await open_private_messages(page)
+    with patch("app.browser._any_visible", new=AsyncMock(side_effect=[False, False])):
+        with patch("app.browser._first_visible_selector", new=AsyncMock(return_value='input[placeholder*="搜索"]')):
+            with caplog.at_level(logging.ERROR, logger="douyin_sender"):
+                await open_private_messages(page)
 
     assert "页面安全诊断" not in caplog.text
     page.wait_for_timeout.assert_awaited_once_with(3_000)
+
+
+@pytest.mark.asyncio
+async def test_search_box_missing_recovers_on_retry() -> None:
+    page = MagicMock()
+    page.goto = AsyncMock()
+    page.reload = AsyncMock()
+    page.wait_for_timeout = AsyncMock()
+
+    # 首轮未就绪，reload 后第二轮命中；login/risk 标记始终不出现。
+    with patch("app.browser._any_visible", new=AsyncMock(return_value=False)):
+        with patch(
+            "app.browser._first_visible_selector",
+            new=AsyncMock(side_effect=[None, 'input[placeholder="搜索"]']),
+        ):
+            await open_private_messages(page)
+
+    page.reload.assert_awaited_once_with(wait_until="domcontentloaded", timeout=45_000)
+
+
+@pytest.mark.asyncio
+async def test_search_box_falls_back_to_goto_when_reload_fails() -> None:
+    page = MagicMock()
+    page.goto = AsyncMock()
+    page.reload = AsyncMock(side_effect=RuntimeError("reload 失败"))
+    page.wait_for_timeout = AsyncMock()
+
+    with patch("app.browser._any_visible", new=AsyncMock(return_value=False)):
+        with patch(
+            "app.browser._first_visible_selector",
+            new=AsyncMock(side_effect=[None, 'input[placeholder*="搜索"]']),
+        ):
+            await open_private_messages(page)
+
+    page.reload.assert_awaited_once()
+    assert page.goto.await_count >= 2  # 初次访问 + reload 失败后的重新访问
 
 
 @pytest.mark.asyncio

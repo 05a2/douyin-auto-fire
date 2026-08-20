@@ -11,7 +11,7 @@ from dataclasses import asdict
 from datetime import datetime
 from pathlib import Path
 
-from app.browser import AuthenticationError, RiskControlError, open_douyin, open_private_messages, save_trace, verify_login
+from app.browser import AuthenticationError, RiskControlError, SearchBoxNotReadyError, open_douyin, open_private_messages, save_trace, verify_login
 from app.config import ConfigError, load_settings, load_task
 from app.douyin import DouyinChat
 from app.history import AlreadyRunningError, History, run_lock
@@ -149,7 +149,7 @@ def main() -> int:
         settings = load_settings(args.env_file)
         with run_lock(settings.artifacts_dir / "run.lock"):
             return asyncio.run(run(dry_run=args.dry_run, env_file=args.env_file))
-    except (ConfigError, AuthenticationError, RiskControlError, AlreadyRunningError) as exc:
+    except (ConfigError, AuthenticationError, RiskControlError, SearchBoxNotReadyError, AlreadyRunningError) as exc:
         print(f"错误: {exc}")
         return 2
     except KeyboardInterrupt:

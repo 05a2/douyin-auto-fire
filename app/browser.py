@@ -32,6 +32,16 @@ class RiskControlError(RuntimeError):
     pass
 
 
+class SearchBoxNotReadyError(RuntimeError):
+    """私信页已打开但搜索框未就绪；说明渲染慢，而非登录失效。"""
+
+
+# 私信页是 SPA，domcontentloaded 之后搜索框由 JS 异步挂载，冷启动时可能超过
+# 单轮等待窗口。这里做有限次数重试，并在需要时 reload，避免把慢渲染误判为认证失效。
+SEARCH_BOX_RETRIES = 3
+_SEARCH_RETRY_DELAY_MS = 1_500
+
+
 # Collects only safe, whitelisted attributes. It deliberately reads no
 # innerText / innerHTML / outerHTML / value, so page content, chat messages
 # and friend nicknames can never enter the public diagnostic output.
@@ -117,15 +127,42 @@ async def open_private_messages(page: Page, timeout_ms: int = 15_000) -> None:
     #    valid, so search-box detection (steps 3/4) is kept separate.
     if await _any_visible(page, LOGIN_REQUIRED_MARKERS, timeout_ms=2_000):
         raise AuthenticationError("进入抖音私信页面后登录状态失效")
-    # 3. Detect the friend search box.
-    if await _any_visible(page, SEARCH_INPUTS, timeout_ms):
-        await page.wait_for_timeout(3_000)
-        return
-    # 4. Search box is missing: emit a safe structural diagnostic before
-    #    raising, without assuming the cause is expired cookies.
+
+    # 3. Detect the friend search box. The chat page is a SPA whose search box is
+    #    mounted asynchronously after domcontentloaded; a single detection round
+    #    occasionally misses it on a cold runner. Retry a few times, reloading the
+    #    page when the first round fails, before concluding anything.
+    for attempt in range(1, SEARCH_BOX_RETRIES + 1):
+        matched = await _first_visible_selector(page, SEARCH_INPUTS, timeout_ms)
+        if matched is not None:
+            LOGGER.info("检测到好友搜索框: selector=%s, 第 %d 次尝试", matched, attempt)
+            await page.wait_for_timeout(3_000)
+            return
+        # The search box is missing; a freshly shown login prompt may only have
+        # appeared during the wait, so re-check before deciding to retry.
+        if await _any_visible(page, RISK_MARKERS, timeout_ms=2_000):
+            raise RiskControlError("抖音私信页面要求进行安全验证，任务已停止")
+        if await _any_visible(page, LOGIN_REQUIRED_MARKERS, timeout_ms=2_000):
+            raise AuthenticationError("进入抖音私信页面后登录状态失效")
+        if attempt < SEARCH_BOX_RETRIES:
+            LOGGER.warning("未检测到好友搜索框，第 %d/%d 次尝试，准备重试", attempt, SEARCH_BOX_RETRIES)
+            if attempt == 1:
+                # Reload once: a fresh load usually mounts the SPA search box.
+                try:
+                    await page.reload(wait_until="domcontentloaded", timeout=45_000)
+                except Exception:
+                    LOGGER.exception("reload 失败，改为重新访问私信页面")
+                    await page.goto(DOUYIN_CHAT_URL, wait_until="domcontentloaded", timeout=45_000)
+            else:
+                await page.wait_for_timeout(_SEARCH_RETRY_DELAY_MS)
+
+    # 4. Search box is still missing after all attempts: emit a safe structural
+    #    diagnostic and choose the exception type based on evidence. Only an
+    #    explicit login marker justifies AuthenticationError; a page that is
+    #    already on /chat merely failed to render the search box in time.
     diagnostic = await _collect_safe_diagnostic(page, LOGIN_REQUIRED_MARKERS, RISK_MARKERS)
-    LOGGER.error("未检测到好友搜索框，页面安全诊断:\n%s", diagnostic)
-    raise AuthenticationError("已进入抖音私信页面，但没有检测到好友搜索框")
+    LOGGER.error("多次重试后仍未检测到好友搜索框，页面安全诊断:\n%s", diagnostic)
+    raise SearchBoxNotReadyError(f"私信页面已打开，但搜索框在 {SEARCH_BOX_RETRIES} 次重试后仍未就绪")
 
 
 async def save_trace(session: BrowserSession, path: Path) -> None:
@@ -142,6 +179,26 @@ async def _any_visible(page: Page, selectors: tuple[str, ...], timeout_ms: int) 
         except Exception:
             continue
     return False
+
+
+async def _first_visible_selector(
+    page: Page,
+    selectors: tuple[str, ...],
+    timeout_ms: int,
+) -> str | None:
+    """Return the first selector whose element becomes visible, or None.
+
+    Unlike ``_any_visible`` this also reports *which* selector matched, so the
+    diagnostic can distinguish a slow render from a structural change.
+    """
+    per_selector = max(250, timeout_ms // max(1, len(selectors)))
+    for selector in selectors:
+        try:
+            await page.locator(selector).first.wait_for(state="visible", timeout=per_selector)
+            return selector
+        except Exception:
+            continue
+    return None
 
 
 async def _collect_safe_diagnostic(
