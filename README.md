@@ -1,5 +1,8 @@
 # 🔥 抖音自动续火花
 
+[![GitHub stars](https://img.shields.io/github/stars/unmev/douyin-auto-fire?style=flat-square)](https://github.com/unmev/douyin-auto-fire/stargazers)
+![Visitors](https://visitor-badge.laobi.icu/badge?page_id=unmev.douyin-auto-fire)
+
 > 定时自动向抖音好友发送消息，保持火花不断。基于 Playwright 模拟真实浏览器操作，配合 GitHub Actions 定时运行，**无需服务器长期在线**。
 >
 ![douyin-auto-fire-banner.svg](https://img.908988.xyz/file/教程/douyin-auto-fire/5pdab8It.svg)
@@ -299,5 +302,4 @@ workflow 会自动为每个配齐了 Cookie 与 Config 的账号生成
 
 本项目采用 [MIT License](LICENSE)。
 
-[![GitHub stars](https://img.shields.io/github/stars/unmev/douyin-auto-fire?style=flat-square)](https://github.com/unmev/douyin-auto-fire/stargazers)
-![Visitors](https://visitor-badge.laobi.icu/badge?page_id=unmev.douyin-auto-fire)
+
