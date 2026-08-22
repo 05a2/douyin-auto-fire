@@ -292,6 +292,16 @@ workflow 会自动为每个配齐了 Cookie 与 Config 的账号生成
 - 同一个账号不要同时运行多个定时器，避免重复发送。
 - GitHub-hosted runner 的网络环境变化可能触发抖音安全验证。
 
+## Star History
+
+<a href="https://www.star-history.com/?repos=unmev%2Fdouyin-auto-fire&type=timeline&logscale=&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=unmev/douyin-auto-fire&type=timeline&theme=dark&logscale&legend=top-left&sealed_token=mG37UD2jXGVQJy-H4cuDopHM4wILzzGQXTz_IEdDgAijz0DDijk1go72jyWmrUZlNRVibNgW6OTl-YQamgUPkpFo_gAO2EPSlVwuZUX3n_7AuKwAK40HMQ" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=unmev/douyin-auto-fire&type=timeline&logscale&legend=top-left&sealed_token=mG37UD2jXGVQJy-H4cuDopHM4wILzzGQXTz_IEdDgAijz0DDijk1go72jyWmrUZlNRVibNgW6OTl-YQamgUPkpFo_gAO2EPSlVwuZUX3n_7AuKwAK40HMQ" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=unmev/douyin-auto-fire&type=timeline&logscale&legend=top-left&sealed_token=mG37UD2jXGVQJy-H4cuDopHM4wILzzGQXTz_IEdDgAijz0DDijk1go72jyWmrUZlNRVibNgW6OTl-YQamgUPkpFo_gAO2EPSlVwuZUX3n_7AuKwAK40HMQ" />
+ </picture>
+</a>
+
 
 ## 友情链接
 
