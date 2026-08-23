@@ -84,13 +84,13 @@ tzdata>=2025.2
 - 如果 Cookie / Storage State 失效或抖音要求验证码，需要本人重新完成登录验证。
 - 抖音网页结构发生变化时，自动化功能可能需要同步适配。
 
-## ⭐ Star History
+## Star History
 
-<a href="https://www.star-history.com/?repos=unmev%2Fdouyin-auto-fire&type=timeline&logscale=&legend=top-left">
+<a href="https://www.star-history.com/?repos=unmev%2Fdouyin-auto-fire&type=date&legend=top-left">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=unmev/douyin-auto-fire&type=timeline&theme=dark&logscale&legend=top-left&sealed_token=mG37UD2jXGVQJy-H4cuDopHM4wILzzGQXTz_IEdDgAijz0DDijk1go72jyWmrUZlNRVibNgW6OTl-YQamgUPkpFo_gAO2EPSlVwuZUX3n_7AuKwAK40HMQ" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=unmev/douyin-auto-fire&type=timeline&logscale&legend=top-left&sealed_token=mG37UD2jXGVQJy-H4cuDopHM4wILzzGQXTz_IEdDgAijz0DDijk1go72jyWmrUZlNRVibNgW6OTl-YQamgUPkpFo_gAO2EPSlVwuZUX3n_7AuKwAK40HMQ" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=unmev/douyin-auto-fire&type=timeline&logscale&legend=top-left&sealed_token=mG37UD2jXGVQJy-H4cuDopHM4wILzzGQXTz_IEdDgAijz0DDijk1go72jyWmrUZlNRVibNgW6OTl-YQamgUPkpFo_gAO2EPSlVwuZUX3n_7AuKwAK40HMQ" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=unmev/douyin-auto-fire&type=date&theme=dark&legend=top-left&sealed_token=TkydV0nYtjJ4qP2Nb5Y9f7po-HgwD2pBSxu77UV_GBPhEVJk1qucxdlno9qqdKfANCMyyjgMRjk4QWqZlHQsHJbB3sEPxDIc3ExjCvi-uNJ1crMXnMCytA" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=unmev/douyin-auto-fire&type=date&legend=top-left&sealed_token=TkydV0nYtjJ4qP2Nb5Y9f7po-HgwD2pBSxu77UV_GBPhEVJk1qucxdlno9qqdKfANCMyyjgMRjk4QWqZlHQsHJbB3sEPxDIc3ExjCvi-uNJ1crMXnMCytA" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=unmev/douyin-auto-fire&type=date&legend=top-left&sealed_token=TkydV0nYtjJ4qP2Nb5Y9f7po-HgwD2pBSxu77UV_GBPhEVJk1qucxdlno9qqdKfANCMyyjgMRjk4QWqZlHQsHJbB3sEPxDIc3ExjCvi-uNJ1crMXnMCytA" />
  </picture>
 </a>
 
