@@ -84,6 +84,12 @@ tzdata>=2025.2
 - 如果 Cookie / Storage State 失效或抖音要求验证码，需要本人重新完成登录验证。
 - 抖音网页结构发生变化时，自动化功能可能需要同步适配。
 
+⭐ 支持一下
+
+如果这个项目帮你省下了每天手动续火花的时间，欢迎点个 Star ⭐ 支持一下！
+
+你的每一个 Star 都是我继续维护、修 Bug 和增加新功能的动力。
+
 ## Star History
 
 <a href="https://www.star-history.com/?repos=unmev%2Fdouyin-auto-fire&type=date&legend=top-left">
